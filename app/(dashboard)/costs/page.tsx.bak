@@ -1,0 +1,758 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
+import { Pencil, Trash2, AlertCircle, X, ChevronDown, Plus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { toast } from 'sonner';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+
+interface Cost {
+  id: string;
+  description: string;
+  costType: 'FIXED' | 'PERCENTAGE';
+  category: 'OPERATIONAL' | 'TAX' | 'COMMISSION' | 'CARD' | 'CUSTOM';
+  customCategory: string | null;
+  fixedValue: number | null;
+  percentage: number | null;
+  paymentDate: string | null;
+  cardOperator: string | null;
+  receivingDays: number | null;
+  isRecurring: boolean;
+  isActive: boolean;
+}
+
+interface CostStats {
+  fixedCostsTotal: number;
+  totalItems: number;
+  categoryCounts: {
+    operational: number;
+    taxes: number;
+    commissions: number;
+  };
+}
+
+const DEFAULT_CATEGORIES = [
+  { value: 'OPERATIONAL', label: 'Operacional' },
+  { value: 'TAX', label: 'Impostos e Taxas' },
+  { value: 'COMMISSION', label: 'Comissões' },
+  { value: 'CARD', label: 'Cartão' },
+];
+
+export default function CostsPage() {
+  const [costs, setCosts] = useState<Cost[]>([]);
+  const [stats, setStats] = useState<CostStats>({
+    fixedCostsTotal: 0,
+    totalItems: 0,
+    categoryCounts: { operational: 0, taxes: 0, commissions: 0 },
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [editingCost, setEditingCost] = useState<Cost | null>(null);
+  const [isExampleDataVisible, setIsExampleDataVisible] = useState(false);
+
+  // Category dropdown state
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+  const [categorySearch, setCategorySearch] = useState('');
+  const [showNewCategoryForm, setShowNewCategoryForm] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Form state
+  const [formData, setFormData] = useState({
+    description: '',
+    costType: 'FIXED' as 'FIXED' | 'PERCENTAGE',
+    category: 'OPERATIONAL' as string,
+    customCategory: '',
+    fixedValue: '',
+    percentage: '',
+    paymentDate: '',
+    cardOperator: '',
+    receivingDays: '',
+    isRecurring: true,
+  });
+
+  useEffect(() => {
+    fetchCosts();
+    fetchStats();
+  }, []);
+
+  // Click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsCategoryDropdownOpen(false);
+        setShowNewCategoryForm(false);
+        setCategorySearch('');
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const fetchCosts = async () => {
+    try {
+      const response = await fetch('/api/costs');
+      if (response.ok) {
+        const data = await response.json();
+        setCosts(data);
+        setIsExampleDataVisible(data.length > 0);
+      }
+    } catch (error) {
+      console.error('Error fetching costs:', error);
+      toast.error('Erro ao carregar custos');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchStats = async () => {
+    try {
+      const response = await fetch('/api/costs/stats');
+      if (response.ok) {
+        const data = await response.json();
+        setStats(data);
+      }
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  };
+
+  // Get all unique custom categories from existing costs
+  const getCustomCategories = () => {
+    const customCategories = costs
+      .filter((c) => c.category === 'CUSTOM' && c.customCategory)
+      .map((c) => c.customCategory!)
+      .filter((value, index, self) => self.indexOf(value) === index);
+    return customCategories;
+  };
+
+  const getCategoryLabel = (category: string, customCategory?: string | null) => {
+    if (category === 'CUSTOM' && customCategory) {
+      return customCategory;
+    }
+    const cat = DEFAULT_CATEGORIES.find((c) => c.value === category);
+    return cat ? cat.label : category;
+  };
+
+  const handleCategorySelect = (value: string) => {
+    if (value === 'NEW') {
+      setShowNewCategoryForm(true);
+      setNewCategoryName('');
+    } else if (value.startsWith('CUSTOM:')) {
+      const customCategoryName = value.replace('CUSTOM:', '');
+      setFormData({ ...formData, category: 'CUSTOM', customCategory: customCategoryName });
+      setIsCategoryDropdownOpen(false);
+      setShowNewCategoryForm(false);
+      setCategorySearch('');
+    } else {
+      setFormData({ ...formData, category: value, customCategory: '' });
+      setIsCategoryDropdownOpen(false);
+      setShowNewCategoryForm(false);
+      setCategorySearch('');
+    }
+  };
+
+  const handleAddNewCategory = () => {
+    if (!newCategoryName.trim()) {
+      toast.error('Digite o nome da categoria');
+      return;
+    }
+
+    setFormData({
+      ...formData,
+      category: 'CUSTOM',
+      customCategory: newCategoryName.trim(),
+    });
+    setIsCategoryDropdownOpen(false);
+    setShowNewCategoryForm(false);
+    setNewCategoryName('');
+    setCategorySearch('');
+    toast.success('Nova categoria adicionada!');
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    try {
+      const payload = {
+        description: formData.description,
+        costType: formData.costType,
+        category: formData.category,
+        customCategory: formData.category === 'CUSTOM' ? formData.customCategory : null,
+        fixedValue:
+          formData.costType === 'FIXED' ? parseFloat(formData.fixedValue) : null,
+        percentage:
+          formData.costType === 'PERCENTAGE'
+            ? parseFloat(formData.percentage)
+            : null,
+        paymentDate: formData.paymentDate || null,
+        cardOperator: formData.category === 'CARD' ? formData.cardOperator : null,
+        receivingDays: formData.category === 'CARD' ? parseInt(formData.receivingDays) : null,
+        isRecurring: formData.isRecurring,
+      };
+
+      const url = editingCost ? `/api/costs/${editingCost.id}` : '/api/costs';
+      const method = editingCost ? 'PATCH' : 'POST';
+
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        toast.success(
+          editingCost ? 'Custo atualizado com sucesso!' : 'Custo cadastrado com sucesso!'
+        );
+        resetForm();
+        fetchCosts();
+        fetchStats();
+      } else {
+        const error = await response.json();
+        toast.error(error.error || 'Erro ao salvar custo');
+      }
+    } catch (error) {
+      console.error('Error saving cost:', error);
+      toast.error('Erro ao salvar custo');
+    }
+  };
+
+  const handleEdit = (cost: Cost) => {
+    setEditingCost(cost);
+    setFormData({
+      description: cost.description,
+      costType: cost.costType,
+      category: cost.category,
+      customCategory: cost.customCategory || '',
+      fixedValue: cost.fixedValue?.toString() || '',
+      percentage: cost.percentage?.toString() || '',
+      paymentDate: cost.paymentDate ? cost.paymentDate.split('T')[0] : '',
+      cardOperator: cost.cardOperator || '',
+      receivingDays: cost.receivingDays?.toString() || '',
+      isRecurring: cost.isRecurring,
+    });
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir este custo?')) return;
+
+    try {
+      const response = await fetch(`/api/costs/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        toast.success('Custo excluído com sucesso!');
+        fetchCosts();
+        fetchStats();
+      } else {
+        toast.error('Erro ao excluir custo');
+      }
+    } catch (error) {
+      console.error('Error deleting cost:', error);
+      toast.error('Erro ao excluir custo');
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      description: '',
+      costType: 'FIXED',
+      category: 'OPERATIONAL',
+      customCategory: '',
+      fixedValue: '',
+      percentage: '',
+      paymentDate: '',
+      cardOperator: '',
+      receivingDays: '',
+      isRecurring: true,
+    });
+    setEditingCost(null);
+  };
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(value);
+  };
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return null;
+    const date = new Date(dateString);
+    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+
+  // Filter categories for dropdown
+  const filteredDefaultCategories = DEFAULT_CATEGORIES.filter((cat) =>
+    cat.label.toLowerCase().includes(categorySearch.toLowerCase())
+  );
+
+  const filteredCustomCategories = getCustomCategories().filter((cat) =>
+    cat.toLowerCase().includes(categorySearch.toLowerCase())
+  );
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-purple-600">Carregando...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-8 max-w-7xl mx-auto space-y-8">
+      {/* Demo Warning */}
+      {isExampleDataVisible && (
+        <Alert className="bg-amber-50 border-amber-200">
+          <AlertCircle className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-amber-800">
+            <strong>Modo de Demonstração:</strong> Você está visualizando dados de exemplo
+            porque seu banco de dados está vazio ou indisponível. Novos cadastros podem não
+            ser salvos permanentemente se houver erro de conexão.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Header */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Gestão de Custos</h1>
+        <p className="text-gray-600 dark:text-gray-400 mt-2">
+          Adicione, edite e visualize todos os custos mensais.
+        </p>
+      </motion.div>
+
+      {/* Stats Cards */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="grid grid-cols-1 md:grid-cols-2 gap-6"
+      >
+        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-6 border border-purple-200">
+          <h3 className="text-sm font-medium text-purple-700 mb-2">
+            Custo Total Mensal (Recorrente)
+          </h3>
+          <p className="text-3xl font-bold text-purple-900">
+            {formatCurrency(stats.fixedCostsTotal)}
+          </p>
+        </div>
+
+        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-6 border border-purple-200">
+          <h3 className="text-sm font-medium text-purple-700 mb-2">Total de Itens</h3>
+          <p className="text-3xl font-bold text-purple-900">{stats.totalItems} Itens</p>
+        </div>
+      </motion.div>
+
+      {/* Two Column Layout: Form + List */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+        className="grid grid-cols-1 lg:grid-cols-2 gap-8"
+      >
+        {/* Form Column */}
+        <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+              {editingCost ? 'Editar Custo' : 'Adicionar Novo Custo'}
+            </h2>
+            {editingCost && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={resetForm}
+                className="text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:text-gray-300"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <Label htmlFor="description">Descrição do Custo</Label>
+              <Input
+                id="description"
+                value={formData.description}
+                onChange={(e) =>
+                  setFormData({ ...formData, description: e.target.value })
+                }
+                placeholder="Ex: Aluguel Clínica, Energia Elétrica"
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="costType">Tipo de Custo</Label>
+                <Select
+                  value={formData.costType}
+                  onValueChange={(value: 'FIXED' | 'PERCENTAGE') =>
+                    setFormData({ ...formData, costType: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="FIXED">Valor Fixo (R$)</SelectItem>
+                    <SelectItem value="PERCENTAGE">Percentual (%)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="category">Categoria</Label>
+                <div className="relative" ref={dropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setIsCategoryDropdownOpen(!isCategoryDropdownOpen)}
+                    className="flex h-10 w-full items-center justify-between rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm ring-offset-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                  >
+                    <span className="truncate">
+                      {getCategoryLabel(formData.category, formData.customCategory) || 'Selecione...'}
+                    </span>
+                    <ChevronDown className="h-4 w-4 opacity-50" />
+                  </button>
+
+                  {isCategoryDropdownOpen && (
+                    <div className="absolute z-50 mt-1 w-full rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg">
+                      <div className="p-2">
+                        <Input
+                          placeholder="Buscar categoria..."
+                          value={categorySearch}
+                          onChange={(e) => setCategorySearch(e.target.value)}
+                          className="mb-2"
+                        />
+                      </div>
+                      <div className="max-h-60 overflow-auto">
+                        {/* Default Categories */}
+                        {filteredDefaultCategories.map((cat) => (
+                          <button
+                            key={cat.value}
+                            type="button"
+                            onClick={() => handleCategorySelect(cat.value)}
+                            className="w-full px-3 py-2 text-left text-sm hover:bg-purple-50 focus:bg-purple-50"
+                          >
+                            {cat.label}
+                          </button>
+                        ))}
+
+                        {/* Custom Categories */}
+                        {filteredCustomCategories.length > 0 && (
+                          <>
+                            <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+                            <div className="px-3 py-1 text-xs text-gray-600 dark:text-gray-400 font-semibold">
+                              Categorias Customizadas
+                            </div>
+                            {filteredCustomCategories.map((cat) => (
+                              <button
+                                key={cat}
+                                type="button"
+                                onClick={() => handleCategorySelect(`CUSTOM:${cat}`)}
+                                className="w-full px-3 py-2 text-left text-sm hover:bg-purple-50 focus:bg-purple-50"
+                              >
+                                {cat}
+                              </button>
+                            ))}
+                          </>
+                        )}
+
+                        {/* Add New Category */}
+                        {!showNewCategoryForm ? (
+                          <>
+                            <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+                            <button
+                              type="button"
+                              onClick={() => handleCategorySelect('NEW')}
+                              className="w-full px-3 py-2 text-left text-sm text-purple-600 hover:bg-purple-50 focus:bg-purple-50 flex items-center gap-2"
+                            >
+                              <Plus className="h-4 w-4" />
+                              Cadastrar Nova Categoria
+                            </button>
+                          </>
+                        ) : (
+                          <div className="p-3 border-t border-gray-200 dark:border-gray-700">
+                            <Input
+                              placeholder="Nome da categoria"
+                              value={newCategoryName}
+                              onChange={(e) => setNewCategoryName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleAddNewCategory();
+                                }
+                              }}
+                              autoFocus
+                              className="mb-2"
+                            />
+                            <div className="flex gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={handleAddNewCategory}
+                                className="flex-1 bg-purple-600 hover:bg-purple-700 text-white"
+                              >
+                                Adicionar
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setShowNewCategoryForm(false);
+                                  setNewCategoryName('');
+                                }}
+                                className="flex-1"
+                              >
+                                Cancelar
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {formData.costType === 'FIXED' ? (
+              <div>
+                <Label htmlFor="fixedValue">Valor Mensal (R$)</Label>
+                <Input
+                  id="fixedValue"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.fixedValue}
+                  onChange={(e) =>
+                    setFormData({ ...formData, fixedValue: e.target.value })
+                  }
+                  placeholder="0,00"
+                  required
+                />
+              </div>
+            ) : (
+              <div>
+                <Label htmlFor="percentage">Percentual sobre Vendas (%)</Label>
+                <Input
+                  id="percentage"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={formData.percentage}
+                  onChange={(e) =>
+                    setFormData({ ...formData, percentage: e.target.value })
+                  }
+                  placeholder="0,00"
+                  required
+                />
+              </div>
+            )}
+
+            <div>
+              <Label htmlFor="paymentDate">Data de Pagamento (opcional)</Label>
+              <Input
+                id="paymentDate"
+                type="date"
+                value={formData.paymentDate}
+                onChange={(e) =>
+                  setFormData({ ...formData, paymentDate: e.target.value })
+                }
+              />
+            </div>
+
+            {/* Campos específicos para taxas de cartão */}
+            {formData.category === 'CARD' && (
+              <>
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="h-2 w-2 bg-purple-600 rounded-full"></div>
+                    <span className="text-sm font-semibold text-purple-900">
+                      Informações para Previsão de Receita
+                    </span>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="cardOperator">Operadora do Cartão *</Label>
+                    <Input
+                      id="cardOperator"
+                      value={formData.cardOperator}
+                      onChange={(e) =>
+                        setFormData({ ...formData, cardOperator: e.target.value })
+                      }
+                      placeholder="Ex: Cielo, Stone, PagSeguro, Rede"
+                      required={formData.category === 'CARD'}
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="receivingDays">Prazo de Recebimento (dias) *</Label>
+                    <Input
+                      id="receivingDays"
+                      type="number"
+                      min="1"
+                      value={formData.receivingDays}
+                      onChange={(e) =>
+                        setFormData({ ...formData, receivingDays: e.target.value })
+                      }
+                      placeholder="Ex: 30"
+                      required={formData.category === 'CARD'}
+                    />
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                      Número de dias até o recebimento do valor após a venda
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
+
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="isRecurring"
+                checked={formData.isRecurring}
+                onChange={(e) =>
+                  setFormData({ ...formData, isRecurring: e.target.checked })
+                }
+                className="rounded border-gray-300 dark:border-gray-600 text-purple-600 focus:ring-purple-500"
+              />
+              <Label htmlFor="isRecurring" className="cursor-pointer">
+                Custo recorrente (mensal)
+              </Label>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4">
+              {editingCost && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={resetForm}
+                >
+                  Cancelar
+                </Button>
+              )}
+              <Button
+                type="submit"
+                className="bg-purple-600 hover:bg-purple-700 text-white"
+              >
+                {editingCost ? 'Atualizar Custo' : 'Cadastrar Custo'}
+              </Button>
+            </div>
+          </form>
+        </div>
+
+        {/* List Column */}
+        <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Lista de Custos</h2>
+
+          {costs.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-gray-600 dark:text-gray-400">Nenhum custo cadastrado ainda.</p>
+              <p className="text-sm text-gray-400 mt-1">
+                Preencha o formulário ao lado para começar.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-[600px] overflow-y-auto">
+              {costs.map((cost) => (
+                <div
+                  key={cost.id}
+                  className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:border-purple-300 hover:bg-purple-50/50 transition-all"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-gray-900 dark:text-gray-100">
+                        {cost.description}
+                      </h3>
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="text-lg font-bold text-purple-600">
+                          {cost.costType === 'FIXED'
+                            ? formatCurrency(cost.fixedValue || 0)
+                            : `${cost.percentage}%`}
+                        </span>
+                        <span className="text-xs text-gray-600 dark:text-gray-400">
+                          {cost.costType === 'PERCENTAGE' && 'sobre vendas'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                            cost.isRecurring
+                              ? 'bg-purple-100 text-purple-800'
+                              : 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200'
+                          }`}
+                        >
+                          {cost.isRecurring ? 'Recorrente' : 'Pontual'}
+                        </span>
+                        <span className="text-xs text-gray-600 dark:text-gray-400">
+                          {getCategoryLabel(cost.category, cost.customCategory)}
+                        </span>
+                        {cost.paymentDate && (
+                          <span className="text-xs text-gray-600 dark:text-gray-400">
+                            Venc: {formatDate(cost.paymentDate)}
+                          </span>
+                        )}
+                      </div>
+                      {/* Informações de cartão */}
+                      {cost.category === 'CARD' && (cost.cardOperator || cost.receivingDays) && (
+                        <div className="mt-3 bg-purple-50 border border-purple-200 rounded-md p-2 space-y-1">
+                          {cost.cardOperator && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <span className="text-purple-700 font-medium">Operadora:</span>
+                              <span className="text-gray-700 dark:text-gray-300">{cost.cardOperator}</span>
+                            </div>
+                          )}
+                          {cost.receivingDays && (
+                            <div className="flex items-center gap-2 text-xs">
+                              <span className="text-purple-700 font-medium">Prazo:</span>
+                              <span className="text-gray-700 dark:text-gray-300">{cost.receivingDays} dias</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEdit(cost)}
+                        className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(cost.id)}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}

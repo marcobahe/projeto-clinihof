@@ -1,0 +1,641 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { motion } from 'framer-motion';
+import { Package, Trash2, Edit2, Tag, TrendingUp, Clock } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { toast } from 'react-hot-toast';
+
+interface Procedure {
+  id: string;
+  name: string;
+  price: number;
+  supplies: Array<{
+    quantity: number;
+    supply: {
+      id: string;
+      name: string;
+      costPerUnit: number;
+    };
+  }>;
+  collaborators: Array<{
+    timeMinutes: number;
+    collaborator: {
+      id: string;
+      name: string;
+      role: string;
+      baseSalary: number;
+      charges: number;
+      monthlyHours: number;
+    };
+  }>;
+}
+
+interface PackageItem {
+  procedureId: string;
+  procedure: Procedure;
+  quantity: number;
+}
+
+interface PackageData {
+  id: string;
+  name: string;
+  finalPrice: number;
+  discountPercent: number;
+  items: PackageItem[];
+  createdAt: string;
+}
+
+export default function PackagesPage() {
+  const [packages, setPackages] = useState<PackageData[]>([]);
+  const [procedures, setProcedures] = useState<Procedure[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Form states
+  const [packageName, setPackageName] = useState('');
+  const [selectedProcedures, setSelectedProcedures] = useState<Array<{ procedureId: string; quantity: number }>>([]);
+  const [finalPrice, setFinalPrice] = useState<number>(0);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  // Click outside to close dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  async function fetchData() {
+    try {
+      const [packagesRes, proceduresRes] = await Promise.all([
+        fetch('/api/packages'),
+        fetch('/api/procedures'),
+      ]);
+
+      if (packagesRes.ok && proceduresRes.ok) {
+        const packagesData = await packagesRes.json();
+        const proceduresData = await proceduresRes.json();
+        setPackages(packagesData);
+        setProcedures(proceduresData);
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      toast.error('Erro ao carregar dados');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Calculate costs for procedures
+  function calculateProcedureCost(procedure: Procedure): number {
+    // Custo de insumos
+    const supplyCost = procedure.supplies.reduce(
+      (sum, ps) => sum + ps.quantity * ps.supply.costPerUnit,
+      0
+    );
+
+    // Custo de mão de obra (hora)
+    const laborCost = procedure.collaborators.reduce((sum, pc) => {
+      const hourlyRate =
+        (pc.collaborator.baseSalary + pc.collaborator.charges) /
+        (pc.collaborator.monthlyHours || 160);
+      return sum + (hourlyRate * pc.timeMinutes) / 60;
+    }, 0);
+
+    return supplyCost + laborCost;
+  }
+
+  // Calculate total standalone price (sum of procedure prices)
+  function calculateStandalonePrice(): number {
+    return selectedProcedures.reduce((sum, item) => {
+      const proc = procedures.find((p) => p.id === item.procedureId);
+      return sum + (proc?.price || 0) * item.quantity;
+    }, 0);
+  }
+
+  // Calculate total cost (supplies + labor)
+  function calculateTotalCost(): number {
+    return selectedProcedures.reduce((sum, item) => {
+      const proc = procedures.find((p) => p.id === item.procedureId);
+      if (!proc) return sum;
+      return sum + calculateProcedureCost(proc) * item.quantity;
+    }, 0);
+  }
+
+  // Calculate profit margin
+  function calculateMargin(): { value: number; percent: number } {
+    const cost = calculateTotalCost();
+    const profit = finalPrice - cost;
+    const percent = cost > 0 ? (profit / cost) * 100 : 0;
+    return { value: profit, percent };
+  }
+
+  // Calculate discount percentage
+  function calculateDiscountPercent(): number {
+    const standalone = calculateStandalonePrice();
+    if (standalone === 0) return 0;
+    return ((standalone - finalPrice) / standalone) * 100;
+  }
+
+  function addProcedureToPackage(procedureId: string) {
+    const existing = selectedProcedures.find((p) => p.procedureId === procedureId);
+    if (existing) {
+      toast.error('Procedimento já adicionado ao pacote');
+      return;
+    }
+    setSelectedProcedures([...selectedProcedures, { procedureId, quantity: 1 }]);
+    setIsDropdownOpen(false);
+  }
+
+  function updateQuantity(procedureId: string, quantity: number) {
+    if (quantity < 1) return;
+    setSelectedProcedures(
+      selectedProcedures.map((p) =>
+        p.procedureId === procedureId ? { ...p, quantity } : p
+      )
+    );
+  }
+
+  function removeProcedure(procedureId: string) {
+    setSelectedProcedures(selectedProcedures.filter((p) => p.procedureId !== procedureId));
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!packageName.trim()) {
+      toast.error('Digite o nome do pacote');
+      return;
+    }
+
+    if (selectedProcedures.length === 0) {
+      toast.error('Adicione pelo menos um procedimento');
+      return;
+    }
+
+    if (finalPrice <= 0) {
+      toast.error('Digite o preço final do pacote');
+      return;
+    }
+
+    const payload = {
+      name: packageName,
+      finalPrice,
+      discountPercent: calculateDiscountPercent(),
+      items: selectedProcedures,
+    };
+
+    try {
+      const url = editingId ? `/api/packages/${editingId}` : '/api/packages';
+      const method = editingId ? 'PATCH' : 'POST';
+
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        toast.success(editingId ? 'Pacote atualizado!' : 'Pacote criado!');
+        resetForm();
+        fetchData();
+      } else {
+        const error = await response.json();
+        toast.error(error.error || 'Erro ao salvar pacote');
+      }
+    } catch (error) {
+      console.error('Error saving package:', error);
+      toast.error('Erro ao salvar pacote');
+    }
+  }
+
+  function resetForm() {
+    setPackageName('');
+    setSelectedProcedures([]);
+    setFinalPrice(0);
+    setEditingId(null);
+  }
+
+  function editPackage(pkg: PackageData) {
+    setEditingId(pkg.id);
+    setPackageName(pkg.name);
+    setFinalPrice(pkg.finalPrice);
+    setSelectedProcedures(
+      pkg.items.map((item) => ({
+        procedureId: item.procedure.id,
+        quantity: item.quantity,
+      }))
+    );
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function deletePackage(id: string) {
+    if (!confirm('Deseja realmente excluir este pacote?')) return;
+
+    try {
+      const response = await fetch(`/api/packages/${id}`, { method: 'DELETE' });
+      if (response.ok) {
+        toast.success('Pacote excluído!');
+        fetchData();
+      } else {
+        toast.error('Erro ao excluir pacote');
+      }
+    } catch (error) {
+      console.error('Error deleting package:', error);
+      toast.error('Erro ao excluir pacote');
+    }
+  }
+
+  const standalonePrice = calculateStandalonePrice();
+  const totalCost = calculateTotalCost();
+  const margin = calculateMargin();
+  const discountPercent = calculateDiscountPercent();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-purple-600">Carregando...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto p-6 max-w-7xl">
+      {/* Warning Banner */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6 flex items-start gap-3"
+      >
+        <div className="text-yellow-600 mt-0.5">⚠️</div>
+        <div className="flex-1">
+          <p className="text-sm text-yellow-800">
+            <strong>Modo de Demonstração:</strong> Você está visualizando dados de exemplo porque seu banco de dados está vazio ou indisponível. Novos cadastros podem não ser salvos permanentemente se houver erro de conexão.
+          </p>
+        </div>
+      </motion.div>
+
+      {/* Header */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-8"
+      >
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">Precificação & Pacotes</h1>
+        <p className="text-gray-600 dark:text-gray-400">
+          Crie pacotes promocionais unindo seus procedimentos técnicos.
+        </p>
+      </motion.div>
+
+      {/* Two-column Layout */}
+      <div className="grid lg:grid-cols-2 gap-6 mb-8">
+        {/* Left Column - Form */}
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <Card className="border-purple-200">
+            <CardHeader>
+              <CardTitle className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                {editingId ? 'Editar Pacote' : 'Novo Pacote'}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-5">
+                {/* Package Name */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Nome do Pacote
+                  </label>
+                  <Input
+                    placeholder="Ex: Protocolo Noiva Completo"
+                    value={packageName}
+                    onChange={(e) => setPackageName(e.target.value)}
+                    className="border-gray-300 dark:border-gray-600 focus:border-purple-500 focus:ring-purple-500"
+                  />
+                </div>
+
+                {/* Procedure Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Itens Inclusos no Pacote
+                  </label>
+                  <div className="relative" ref={dropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                      className="w-full px-4 py-2 text-left border border-gray-300 dark:border-gray-600 rounded-md hover:border-purple-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-colors"
+                    >
+                      <span className="text-gray-600 dark:text-gray-400">Selecionar Procedimento...</span>
+                    </button>
+
+                    {isDropdownOpen && (
+                      <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-60 overflow-auto">
+                        {procedures.length === 0 ? (
+                          <div className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                            Nenhum procedimento cadastrado
+                          </div>
+                        ) : (
+                          procedures.map((proc) => (
+                            <button
+                              key={proc.id}
+                              type="button"
+                              onClick={() => addProcedureToPackage(proc.id)}
+                              className="w-full px-4 py-2 text-left hover:bg-purple-50 transition-colors flex items-center justify-between"
+                            >
+                              <span className="text-sm text-gray-700 dark:text-gray-300">{proc.name}</span>
+                              <span className="text-xs text-gray-600 dark:text-gray-400">
+                                R$ {proc.price.toFixed(2)}
+                              </span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Selected Procedures List */}
+                  <div className="mt-4 space-y-2">
+                    {selectedProcedures.length === 0 ? (
+                      <p className="text-sm text-gray-600 dark:text-gray-400 text-center py-4">
+                        Nenhum item adicionado ao pacote.
+                      </p>
+                    ) : (
+                      selectedProcedures.map((item) => {
+                        const proc = procedures.find((p) => p.id === item.procedureId);
+                        if (!proc) return null;
+
+                        return (
+                          <div
+                            key={item.procedureId}
+                            className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700"
+                          >
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{proc.name}</p>
+                              <p className="text-xs text-gray-600 dark:text-gray-400">
+                                R$ {proc.price.toFixed(2)} cada
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="number"
+                                min="1"
+                                value={item.quantity}
+                                onChange={(e) =>
+                                  updateQuantity(item.procedureId, parseInt(e.target.value) || 1)
+                                }
+                                className="w-16 h-8 text-center border-gray-300 dark:border-gray-600"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeProcedure(item.procedureId)}
+                                className="p-1 text-red-600 hover:bg-red-50 rounded"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Right Column - Pricing Summary */}
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.2 }}
+        >
+          <div className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-lg p-6 text-white shadow-lg">
+            <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
+              <Tag className="h-5 w-5" />
+              Definição de Preço
+            </h3>
+
+            <div className="space-y-4">
+              {/* Standalone Price */}
+              <div className="flex items-center justify-between">
+                <span className="text-purple-100 text-sm">Soma dos Itens (Preço Avulso)</span>
+                <span className="text-2xl font-bold">
+                  R$ {standalonePrice.toFixed(2)}
+                </span>
+              </div>
+
+              {/* Final Price Input */}
+              <div>
+                <label className="block text-purple-100 text-sm mb-2">
+                  Preço Final do Pacote
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-purple-200">
+                    R$
+                  </span>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={finalPrice}
+                    onChange={(e) => setFinalPrice(parseFloat(e.target.value) || 0)}
+                    className="pl-10 bg-white dark:bg-gray-900/20 border-white/30 text-white placeholder:text-purple-200 focus:bg-white dark:bg-gray-900/30 focus:border-white"
+                    placeholder="0,00"
+                  />
+                </div>
+              </div>
+
+              {/* Discount */}
+              <div className="flex items-center justify-between pt-2 border-t border-white/20">
+                <span className="text-purple-100 text-sm">Desconto Real</span>
+                <span className="text-lg font-semibold flex items-center gap-2">
+                  {discountPercent.toFixed(1)}% OFF
+                </span>
+              </div>
+
+              {/* Total Cost */}
+              <div className="flex items-center justify-between">
+                <span className="text-purple-100 text-sm flex items-center gap-1">
+                  <Clock className="h-4 w-4" />
+                  Custo Total (Insumos+Hora)
+                </span>
+                <span className="text-lg font-semibold">
+                  R$ {totalCost.toFixed(2)}
+                </span>
+              </div>
+
+              {/* Profit Margin */}
+              <div className="bg-white dark:bg-gray-900/10 rounded-lg p-4 mt-4">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-purple-100 text-sm flex items-center gap-1">
+                    <TrendingUp className="h-4 w-4" />
+                    Margem de Lucro
+                  </span>
+                  <span
+                    className={`text-xl font-bold ${
+                      margin.value >= 0 ? 'text-green-300' : 'text-red-300'
+                    }`}
+                  >
+                    {margin.percent >= 0 ? '+' : ''}{margin.percent.toFixed(1)}%
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span
+                    className={`text-2xl font-bold ${
+                      margin.value >= 0 ? 'text-green-300' : 'text-red-300'
+                    }`}
+                  >
+                    R$ {margin.value.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4">
+                <Button
+                  type="button"
+                  onClick={resetForm}
+                  variant="outline"
+                  className="flex-1 bg-white dark:bg-gray-900/10 border-white/30 text-white hover:bg-white dark:bg-gray-900/20"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleSubmit}
+                  className="flex-1 bg-white dark:bg-gray-900 text-purple-700 hover:bg-purple-50 font-semibold"
+                >
+                  {editingId ? 'Atualizar' : 'Salvar'} Pacote
+                </Button>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Active Packages List */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+      >
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">Pacotes Ativos</h2>
+
+        {packages.length === 0 ? (
+          <Card className="border-gray-200 dark:border-gray-700">
+            <CardContent className="py-12 text-center">
+              <Package className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+              <p className="text-gray-600 dark:text-gray-400">Nenhum pacote cadastrado ainda.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4">
+            {packages.map((pkg, index) => {
+              const pkgCost = pkg.items.reduce((sum, item) => {
+                return sum + calculateProcedureCost(item.procedure) * item.quantity;
+              }, 0);
+              const pkgProfit = pkg.finalPrice - pkgCost;
+              const pkgMargin = pkgCost > 0 ? (pkgProfit / pkgCost) * 100 : 0;
+
+              return (
+                <motion.div
+                  key={pkg.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 * index }}
+                >
+                  <Card className="border-purple-200 hover:shadow-md transition-shadow">
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">
+                            {pkg.name}
+                          </h3>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
+                            {pkg.items.length} {pkg.items.length === 1 ? 'procedimento' : 'procedimentos'}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => editPackage(pkg)}
+                            className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => deletePackage(pkg.id)}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid md:grid-cols-3 gap-4 mb-4">
+                        <div className="bg-purple-50 rounded-lg p-3">
+                          <p className="text-xs text-purple-600 mb-1">Preço Final</p>
+                          <p className="text-xl font-bold text-purple-700">
+                            R$ {pkg.finalPrice.toFixed(2)}
+                          </p>
+                        </div>
+                        <div className="bg-green-50 rounded-lg p-3">
+                          <p className="text-xs text-green-600 mb-1">Desconto</p>
+                          <p className="text-xl font-bold text-green-700">
+                            {pkg.discountPercent.toFixed(1)}% OFF
+                          </p>
+                        </div>
+                        <div className="bg-blue-50 rounded-lg p-3">
+                          <p className="text-xs text-blue-600 mb-1">Margem</p>
+                          <p
+                            className={`text-xl font-bold ${
+                              pkgMargin >= 0 ? 'text-blue-700' : 'text-red-700'
+                            }`}
+                          >
+                            {pkgMargin >= 0 ? '+' : ''}{pkgMargin.toFixed(1)}%
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Procedimentos inclusos:</p>
+                        <div className="flex flex-wrap gap-2">
+                          {pkg.items.map((item) => (
+                            <span
+                              key={item.procedure.id}
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-full text-xs"
+                            >
+                              {item.procedure.name}
+                              {item.quantity > 1 && (
+                                <span className="text-purple-600 font-semibold">
+                                  x{item.quantity}
+                                </span>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              );
+            })}
+          </div>
+        )}
+      </motion.div>
+    </div>
+  );
+}

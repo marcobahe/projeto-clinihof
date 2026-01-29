@@ -1,0 +1,886 @@
+'use client';
+import { formatCurrency, formatNumber, formatPercent } from '@/lib/utils';
+
+import { useState, useEffect, useRef } from 'react';
+import { useSession } from 'next-auth/react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { toast } from 'sonner';
+import { 
+  Plus, 
+  Edit2, 
+  Trash2, 
+  Users, 
+  Search, 
+  DollarSign, 
+  Clock,
+  UserCheck,
+  ChevronDown,
+  ChevronRight
+} from 'lucide-react';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
+
+interface Collaborator {
+  id: string;
+  name: string;
+  cpf?: string;
+  rg?: string;
+  birthDate?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  role: string;
+  admissionDate?: string;
+  baseSalary: number;
+  commissionType: 'PERCENTAGE' | 'FIXED';
+  commissionValue: number;
+  charges: number;
+  monthlyHours: number;
+  isActive: boolean;
+}
+
+interface Stats {
+  totalCollaborators: number;
+  activeCollaborators: number;
+  totalMonthlyCost: number;
+}
+
+export default function CollaboratorsPage() {
+  const { data: session, status } = useSession() || {};
+  const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Dropdown states
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [dropdownSearch, setDropdownSearch] = useState('');
+  const [showNewRoleForm, setShowNewRoleForm] = useState(false);
+  const [newRoleName, setNewRoleName] = useState('');
+  const [uniqueRoles, setUniqueRoles] = useState<string[]>([]);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Form state
+  const [formData, setFormData] = useState({
+    // Dados pessoais
+    name: '',
+    cpf: '',
+    rg: '',
+    birthDate: '',
+    phone: '',
+    email: '',
+    address: '',
+    city: '',
+    state: '',
+    zipCode: '',
+    // Dados profissionais
+    role: '',
+    admissionDate: '',
+    // Dados financeiros
+    baseSalary: '',
+    commissionType: 'PERCENTAGE' as 'PERCENTAGE' | 'FIXED',
+    commissionValue: '',
+    charges: '',
+    monthlyHours: '160',
+  });
+
+  useEffect(() => {
+    if (status === 'authenticated') {
+      fetchCollaborators();
+      fetchStats();
+    }
+  }, [status]);
+
+  // Extract unique roles from existing collaborators
+  useEffect(() => {
+    if (collaborators.length > 0) {
+      const roles = Array.from(new Set(collaborators.map(c => c.role))).sort();
+      setUniqueRoles(roles);
+    }
+  }, [collaborators]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+        setShowNewRoleForm(false);
+        setDropdownSearch('');
+      }
+    };
+
+    if (isDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isDropdownOpen]);
+
+  const fetchCollaborators = async () => {
+    try {
+      const response = await fetch('/api/collaborators');
+      if (response.ok) {
+        const data = await response.json();
+        setCollaborators(data);
+      }
+    } catch (error) {
+      toast.error('Erro ao carregar colaboradores');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchStats = async () => {
+    try {
+      const response = await fetch('/api/collaborators/stats');
+      if (response.ok) {
+        const data = await response.json();
+        setStats(data);
+      }
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  };
+
+  const selectRole = (roleName: string) => {
+    setFormData({ ...formData, role: roleName });
+    setIsDropdownOpen(false);
+    setDropdownSearch('');
+    setShowNewRoleForm(false);
+  };
+
+  const handleAddNewRole = () => {
+    if (!newRoleName.trim()) {
+      toast.error('Digite o nome da função');
+      return;
+    }
+
+    // Check if role already exists
+    if (uniqueRoles.some(r => r.toLowerCase() === newRoleName.toLowerCase())) {
+      toast.error('Essa função já existe');
+      return;
+    }
+
+    // Set the new role
+    setFormData({ ...formData, role: newRoleName.trim() });
+    setUniqueRoles([...uniqueRoles, newRoleName.trim()].sort());
+    toast.success('Nova função adicionada!');
+    
+    // Reset dropdown state
+    setNewRoleName('');
+    setShowNewRoleForm(false);
+    setIsDropdownOpen(false);
+    setDropdownSearch('');
+  };
+
+  const resetRoleForm = () => {
+    setNewRoleName('');
+    setShowNewRoleForm(false);
+    setDropdownSearch('');
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!formData.name || !formData.role) {
+      toast.error('Preencha o nome e a função');
+      return;
+    }
+
+    try {
+      const payload = {
+        name: formData.name,
+        cpf: formData.cpf || null,
+        rg: formData.rg || null,
+        birthDate: formData.birthDate || null,
+        phone: formData.phone || null,
+        email: formData.email || null,
+        address: formData.address || null,
+        city: formData.city || null,
+        state: formData.state || null,
+        zipCode: formData.zipCode || null,
+        role: formData.role,
+        admissionDate: formData.admissionDate || null,
+        baseSalary: parseFloat(formData.baseSalary) || 0,
+        commissionType: formData.commissionType,
+        commissionValue: parseFloat(formData.commissionValue) || 0,
+        charges: parseFloat(formData.charges) || 0,
+        monthlyHours: parseInt(formData.monthlyHours) || 160,
+      };
+
+      const url = editingId ? `/api/collaborators/${editingId}` : '/api/collaborators';
+      const method = editingId ? 'PATCH' : 'POST';
+
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        toast.success(editingId ? 'Colaborador atualizado!' : 'Colaborador cadastrado!');
+        resetForm();
+        fetchCollaborators();
+        fetchStats();
+      } else {
+        toast.error('Erro ao salvar colaborador');
+      }
+    } catch (error) {
+      toast.error('Erro ao salvar colaborador');
+    }
+  };
+
+  const handleEdit = (collaborator: Collaborator) => {
+    setEditingId(collaborator.id);
+    setFormData({
+      name: collaborator.name,
+      cpf: collaborator.cpf || '',
+      rg: collaborator.rg || '',
+      birthDate: collaborator.birthDate ? collaborator.birthDate.split('T')[0] : '',
+      phone: collaborator.phone || '',
+      email: collaborator.email || '',
+      address: collaborator.address || '',
+      city: collaborator.city || '',
+      state: collaborator.state || '',
+      zipCode: collaborator.zipCode || '',
+      role: collaborator.role,
+      admissionDate: collaborator.admissionDate ? collaborator.admissionDate.split('T')[0] : '',
+      baseSalary: collaborator.baseSalary.toString(),
+      commissionType: collaborator.commissionType,
+      commissionValue: collaborator.commissionValue.toString(),
+      charges: collaborator.charges.toString(),
+      monthlyHours: collaborator.monthlyHours.toString(),
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Deseja realmente excluir este colaborador?')) return;
+
+    try {
+      const response = await fetch(`/api/collaborators/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        toast.success('Colaborador excluído!');
+        fetchCollaborators();
+        fetchStats();
+      } else {
+        toast.error('Erro ao excluir colaborador');
+      }
+    } catch (error) {
+      toast.error('Erro ao excluir colaborador');
+    }
+  };
+
+  const resetForm = () => {
+    setEditingId(null);
+    setFormData({
+      name: '',
+      cpf: '',
+      rg: '',
+      birthDate: '',
+      phone: '',
+      email: '',
+      address: '',
+      city: '',
+      state: '',
+      zipCode: '',
+      role: '',
+      admissionDate: '',
+      baseSalary: '',
+      commissionType: 'PERCENTAGE',
+      commissionValue: '',
+      charges: '',
+      monthlyHours: '160',
+    });
+  };
+
+  const filteredCollaborators = collaborators.filter((collab) =>
+    collab.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    collab.role.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  if (status === 'loading' || loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-8 space-y-6">
+      <div>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">Colaboradores</h1>
+        <p className="text-gray-500 dark:text-gray-400 mt-1">Gerenciamento completo da equipe</p>
+      </div>
+
+      {/* Statistics Cards */}
+      {stats && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Total de Colaboradores</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.totalCollaborators}</p>
+                </div>
+                <div className="h-12 w-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <Users className="h-6 w-6 text-purple-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Colaboradores Ativos</p>
+                  <p className="text-2xl font-bold text-green-600">{stats.activeCollaborators}</p>
+                </div>
+                <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
+                  <UserCheck className="h-6 w-6 text-green-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Custo Mensal Total</p>
+                  <p className="text-2xl font-bold text-purple-600">
+                    {formatCurrency(stats.totalMonthlyCost)}
+                  </p>
+                </div>
+                <div className="h-12 w-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <DollarSign className="h-6 w-6 text-purple-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Two Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left Column - Form */}
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-purple-600" />
+                {editingId ? 'Editar Colaborador' : 'Novo Colaborador'}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Dados Pessoais */}
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 pb-2 border-b">
+                    Dados Pessoais
+                  </h3>
+                  <div className="space-y-3">
+                    {/* Nome - sempre visível */}
+                    <div>
+                      <Label htmlFor="name">Nome Completo *</Label>
+                      <Input
+                        id="name"
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        placeholder="Nome completo do colaborador"
+                      />
+                    </div>
+
+                    {/* Telefone e E-mail - sempre visíveis */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <Label htmlFor="phone">Telefone/WhatsApp</Label>
+                        <Input
+                          id="phone"
+                          value={formData.phone}
+                          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                          placeholder="(00) 00000-0000"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="email">E-mail</Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          value={formData.email}
+                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                          placeholder="email@exemplo.com"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Acordeon para Mais Dados Pessoais */}
+                    <Accordion type="single" collapsible className="w-full">
+                      <AccordionItem value="more-personal-data" className="border-none">
+                        <AccordionTrigger className="py-3 hover:no-underline">
+                          <span className="font-semibold text-purple-600 dark:text-purple-400 text-sm">
+                            Mais dados pessoais
+                          </span>
+                        </AccordionTrigger>
+                        <AccordionContent className="space-y-3 pt-3">
+                          {/* CPF e RG */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                              <Label htmlFor="cpf">CPF</Label>
+                              <Input
+                                id="cpf"
+                                value={formData.cpf}
+                                onChange={(e) => setFormData({ ...formData, cpf: e.target.value })}
+                                placeholder="000.000.000-00"
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor="rg">RG</Label>
+                              <Input
+                                id="rg"
+                                value={formData.rg}
+                                onChange={(e) => setFormData({ ...formData, rg: e.target.value })}
+                                placeholder="00.000.000-0"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Data de Nascimento */}
+                          <div>
+                            <Label htmlFor="birthDate">Data de Nascimento</Label>
+                            <Input
+                              id="birthDate"
+                              type="date"
+                              value={formData.birthDate}
+                              onChange={(e) => setFormData({ ...formData, birthDate: e.target.value })}
+                            />
+                          </div>
+
+                          {/* Endereço */}
+                          <div>
+                            <Label htmlFor="address">Endereço</Label>
+                            <Input
+                              id="address"
+                              value={formData.address}
+                              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                              placeholder="Rua, número, complemento"
+                            />
+                          </div>
+
+                          {/* Cidade, Estado e CEP */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            <div>
+                              <Label htmlFor="city">Cidade</Label>
+                              <Input
+                                id="city"
+                                value={formData.city}
+                                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                                placeholder="Cidade"
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor="state">Estado</Label>
+                              <Input
+                                id="state"
+                                value={formData.state}
+                                onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                                placeholder="UF"
+                                maxLength={2}
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor="zipCode">CEP</Label>
+                              <Input
+                                id="zipCode"
+                                value={formData.zipCode}
+                                onChange={(e) => setFormData({ ...formData, zipCode: e.target.value })}
+                                placeholder="00000-000"
+                              />
+                            </div>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
+                  </div>
+                </div>
+
+                {/* Dados Profissionais */}
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 pb-2 border-b">
+                    Dados Profissionais
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="relative" ref={dropdownRef}>
+                      <Label htmlFor="role">Função *</Label>
+                      <button
+                        type="button"
+                        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                        className={`w-full flex items-center justify-between px-3 py-2 border rounded-lg bg-white dark:bg-gray-900 text-left transition-colors ${
+                          formData.role
+                            ? 'border-purple-300 text-gray-900 dark:text-gray-100'
+                            : 'border-gray-300 dark:border-gray-600 text-gray-400'
+                        } hover:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-500`}
+                      >
+                        <span className={formData.role ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400'}>
+                          {formData.role || 'Selecione ou cadastre uma função'}
+                        </span>
+                        <ChevronDown className={`h-4 w-4 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {/* Dropdown Menu */}
+                      {isDropdownOpen && (
+                        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-64 overflow-hidden">
+                          {!showNewRoleForm ? (
+                            <>
+                              {/* Search bar */}
+                              <div className="p-2 border-b">
+                                <Input
+                                  type="text"
+                                  placeholder="Buscar função..."
+                                  value={dropdownSearch}
+                                  onChange={(e) => setDropdownSearch(e.target.value)}
+                                  className="text-sm"
+                                  autoFocus
+                                />
+                              </div>
+
+                              {/* List of existing roles */}
+                              <div className="max-h-40 overflow-y-auto">
+                                {uniqueRoles
+                                  .filter(role => role.toLowerCase().includes(dropdownSearch.toLowerCase()))
+                                  .map((role) => (
+                                    <button
+                                      key={role}
+                                      type="button"
+                                      onClick={() => selectRole(role)}
+                                      className="w-full px-4 py-2 text-left hover:bg-purple-50 transition-colors text-sm text-gray-700 dark:text-gray-300 hover:text-purple-700"
+                                    >
+                                      {role}
+                                    </button>
+                                  ))}
+                                {uniqueRoles.filter(role => role.toLowerCase().includes(dropdownSearch.toLowerCase())).length === 0 && (
+                                  <div className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 text-center">
+                                    Nenhuma função encontrada
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Add new role button */}
+                              <div className="border-t p-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowNewRoleForm(true)}
+                                  className="w-full px-3 py-2 text-sm text-purple-600 hover:bg-purple-50 rounded-md transition-colors font-medium flex items-center justify-center gap-2"
+                                >
+                                  <Plus className="h-4 w-4" />
+                                  Cadastrar nova função
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            /* New role form */
+                            <div className="p-3 space-y-3">
+                              <div>
+                                <Label htmlFor="newRoleName" className="text-xs">Nova Função</Label>
+                                <Input
+                                  id="newRoleName"
+                                  value={newRoleName}
+                                  onChange={(e) => setNewRoleName(e.target.value)}
+                                  placeholder="Ex: Esteticista, Médico, Assistente"
+                                  className="mt-1"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      handleAddNewRole();
+                                    }
+                                  }}
+                                />
+                              </div>
+                              <div className="flex flex-col sm:flex-row gap-2">
+                                <Button
+                                  type="button"
+                                  onClick={handleAddNewRole}
+                                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white text-sm"
+                                  size="sm"
+                                >
+                                  Adicionar
+                                </Button>
+                                <Button
+                                  type="button"
+                                  onClick={resetRoleForm}
+                                  variant="outline"
+                                  className="flex-1 text-sm"
+                                  size="sm"
+                                >
+                                  Cancelar
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <Label htmlFor="admissionDate">Data de Admissão</Label>
+                      <Input
+                        id="admissionDate"
+                        type="date"
+                        value={formData.admissionDate}
+                        onChange={(e) => setFormData({ ...formData, admissionDate: e.target.value })}
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="monthlyHours">Carga Horária Mensal</Label>
+                      <Input
+                        id="monthlyHours"
+                        type="number"
+                        value={formData.monthlyHours}
+                        onChange={(e) => setFormData({ ...formData, monthlyHours: e.target.value })}
+                        placeholder="160"
+                      />
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Horas trabalhadas por mês</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Dados Financeiros */}
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 pb-2 border-b">
+                    Dados Financeiros
+                  </h3>
+                  <div className="space-y-3">
+                    <div>
+                      <Label htmlFor="baseSalary">Salário Base (R$)</Label>
+                      <Input
+                        id="baseSalary"
+                        type="number"
+                        step="0.01"
+                        value={formData.baseSalary}
+                        onChange={(e) => setFormData({ ...formData, baseSalary: e.target.value })}
+                        placeholder="0.00"
+                      />
+                    </div>
+
+                    <div>
+                      <Label>Tipo de Comissão</Label>
+                      <div className="flex gap-2 mt-2">
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, commissionType: 'PERCENTAGE' })}
+                          className={`flex-1 py-2 px-4 rounded-lg border-2 transition-all ${
+                            formData.commissionType === 'PERCENTAGE'
+                              ? 'border-purple-600 bg-purple-50 text-purple-700 font-semibold'
+                              : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:border-gray-600'
+                          }`}
+                        >
+                          Percentual (%)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, commissionType: 'FIXED' })}
+                          className={`flex-1 py-2 px-4 rounded-lg border-2 transition-all ${
+                            formData.commissionType === 'FIXED'
+                              ? 'border-purple-600 bg-purple-50 text-purple-700 font-semibold'
+                              : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:border-gray-600'
+                          }`}
+                        >
+                          Valor Fixo (R$)
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="commissionValue">
+                        {formData.commissionType === 'PERCENTAGE' ? 'Comissão (%)' : 'Comissão (R$)'}
+                      </Label>
+                      <Input
+                        id="commissionValue"
+                        type="number"
+                        step="0.01"
+                        value={formData.commissionValue}
+                        onChange={(e) => setFormData({ ...formData, commissionValue: e.target.value })}
+                        placeholder={formData.commissionType === 'PERCENTAGE' ? '0.00' : '0.00'}
+                      />
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {formData.commissionType === 'PERCENTAGE'
+                          ? 'Percentual sobre vendas'
+                          : 'Valor fixo mensal'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="charges">Encargos Mensais (R$)</Label>
+                      <Input
+                        id="charges"
+                        type="number"
+                        step="0.01"
+                        value={formData.charges}
+                        onChange={(e) => setFormData({ ...formData, charges: e.target.value })}
+                        placeholder="0.00"
+                      />
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">INSS, FGTS e outros encargos</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <Button type="submit" className="w-full sm:flex-1 bg-purple-600 hover:bg-purple-700">
+                    <Plus className="h-4 w-4 mr-2" />
+                    {editingId ? 'Atualizar Colaborador' : 'Cadastrar Colaborador'}
+                  </Button>
+                  {editingId && (
+                    <Button type="button" variant="outline" onClick={resetForm}>
+                      Cancelar
+                    </Button>
+                  )}
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Column - Collaborator List */}
+        <div className="space-y-6">
+          <Card className="h-fit">
+            <CardHeader>
+              <div className="flex items-center justify-between gap-4">
+                <CardTitle>Equipe</CardTitle>
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Buscar colaborador..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {filteredCollaborators.length === 0 ? (
+                <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                  <Users className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                  <p className="font-medium">Nenhum colaborador encontrado</p>
+                  <p className="text-sm">Cadastre o primeiro colaborador usando o formulário ao lado</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-[calc(100vh-300px)] overflow-y-auto pr-2">
+                  {filteredCollaborators.map((collaborator) => {
+                    const monthlyCost = collaborator.baseSalary + collaborator.charges;
+                    const hourlyRate = collaborator.monthlyHours > 0
+                      ? monthlyCost / collaborator.monthlyHours
+                      : 0;
+
+                    return (
+                      <div
+                        key={collaborator.id}
+                        className={`p-4 border rounded-lg hover:shadow-md transition-shadow ${
+                          collaborator.isActive
+                            ? 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900'
+                            : 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-semibold text-lg text-gray-900 dark:text-gray-100">
+                                {collaborator.name}
+                              </h3>
+                              {!collaborator.isActive && (
+                                <span className="px-2 py-0.5 text-xs bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded">
+                                  Inativo
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">{collaborator.role}</p>
+                            {collaborator.phone && (
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{collaborator.phone}</p>
+                            )}
+                          </div>
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleEdit(collaborator)}
+                              className="h-8 w-8 p-0 hover:bg-purple-100"
+                            >
+                              <Edit2 className="h-3.5 w-3.5 text-purple-600" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleDelete(collaborator.id)}
+                              className="h-8 w-8 p-0 hover:bg-red-100"
+                            >
+                              <Trash2 className="h-3.5 w-3.5 text-red-600" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-gray-600 dark:text-gray-400">Salário base:</span>
+                            <span className="font-medium">{formatCurrency(collaborator.baseSalary)}</span>
+                          </div>
+
+                          <div className="flex justify-between">
+                            <span className="text-gray-600 dark:text-gray-400">Comissão:</span>
+                            <span className="font-medium">
+                              {collaborator.commissionType === 'PERCENTAGE'
+                                ? `${collaborator.commissionValue}%`
+                                : formatCurrency(collaborator.commissionValue)}
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between">
+                            <span className="text-gray-600 dark:text-gray-400">Encargos:</span>
+                            <span className="font-medium">{formatCurrency(collaborator.charges)}</span>
+                          </div>
+
+                          <div className="flex justify-between pt-2 border-t">
+                            <span className="text-gray-600 dark:text-gray-400 font-medium">Custo mensal:</span>
+                            <span className="font-semibold text-purple-600">
+                              {formatCurrency(monthlyCost)}
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between">
+                            <span className="text-gray-600 dark:text-gray-400 text-xs">Custo por hora:</span>
+                            <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                              {formatCurrency(hourlyRate)}/h
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}

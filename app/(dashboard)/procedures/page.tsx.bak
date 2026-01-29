@@ -1,0 +1,717 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import {
+  Plus,
+  Search,
+  Trash2,
+  Edit2,
+  Stethoscope,
+  X,
+  TrendingUp,
+  Package,
+  Users,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { toast } from 'sonner';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+
+interface Supply {
+  id: string;
+  name: string;
+  unit: string;
+  costPerUnit: number;
+}
+
+interface Collaborator {
+  id: string;
+  name: string;
+  role: string;
+  hourlyCost: number;
+}
+
+interface ProcedureSupply {
+  supplyId: string;
+  quantity: number;
+  supply?: Supply;
+}
+
+interface ProcedureCollaborator {
+  collaboratorId: string;
+  timeMinutes: number;
+  collaborator?: Collaborator;
+}
+
+interface Procedure {
+  id: string;
+  name: string;
+  price: number;
+  duration: number;
+  supplies?: ProcedureSupply[];
+  collaborators?: ProcedureCollaborator[];
+}
+
+export default function ProceduresPage() {
+  const [procedures, setProcedures] = useState<Procedure[]>([]);
+  const [supplies, setSupplies] = useState<Supply[]>([]);
+  const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [editingProcedure, setEditingProcedure] = useState<Procedure | null>(null);
+
+  // Form state
+  const [formData, setFormData] = useState({
+    name: '',
+    price: '',
+    duration: '',
+  });
+  const [selectedSupplies, setSelectedSupplies] = useState<ProcedureSupply[]>([]);
+  const [selectedCollaborators, setSelectedCollaborators] = useState<ProcedureCollaborator[]>([]);
+
+  // Temporary add state
+  const [tempSupply, setTempSupply] = useState({ supplyId: '', quantity: '1' });
+  const [tempCollaborator, setTempCollaborator] = useState({ collaboratorId: '', timeMinutes: '60' });
+
+  const fetchData = async () => {
+    try {
+      const [procRes, supRes, collabRes] = await Promise.all([
+        fetch('/api/procedures'),
+        fetch('/api/supplies'),
+        fetch('/api/collaborators'),
+      ]);
+
+      if (procRes.ok) setProcedures(await procRes.json());
+      if (supRes.ok) setSupplies(await supRes.json());
+      if (collabRes.ok) setCollaborators(await collabRes.json());
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      toast.error('Erro ao carregar dados');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const resetForm = () => {
+    setFormData({ name: '', price: '', duration: '' });
+    setSelectedSupplies([]);
+    setSelectedCollaborators([]);
+    setTempSupply({ supplyId: '', quantity: '1' });
+    setTempCollaborator({ collaboratorId: '', timeMinutes: '60' });
+    setEditingProcedure(null);
+  };
+
+  const loadProcedureForEdit = (procedure: Procedure) => {
+    setEditingProcedure(procedure);
+    setFormData({
+      name: procedure.name,
+      price: procedure.price.toString(),
+      duration: procedure.duration.toString(),
+    });
+    setSelectedSupplies(
+      procedure.supplies?.map((ps) => ({
+        supplyId: ps.supplyId,
+        quantity: ps.quantity,
+        supply: supplies.find((s) => s.id === ps.supplyId),
+      })) || []
+    );
+    setSelectedCollaborators(
+      procedure.collaborators?.map((pc) => ({
+        collaboratorId: pc.collaboratorId,
+        timeMinutes: pc.timeMinutes,
+        collaborator: collaborators.find((c) => c.id === pc.collaboratorId),
+      })) || []
+    );
+  };
+
+  // Add supply to list
+  const addSupply = () => {
+    if (!tempSupply.supplyId) {
+      toast.error('Selecione um insumo');
+      return;
+    }
+    const supply = supplies.find((s) => s.id === tempSupply.supplyId);
+    if (selectedSupplies.some((s) => s.supplyId === tempSupply.supplyId)) {
+      toast.error('Insumo já adicionado');
+      return;
+    }
+    setSelectedSupplies([
+      ...selectedSupplies,
+      {
+        supplyId: tempSupply.supplyId,
+        quantity: parseFloat(tempSupply.quantity) || 1,
+        supply,
+      },
+    ]);
+    setTempSupply({ supplyId: '', quantity: '1' });
+  };
+
+  // Add collaborator to list
+  const addCollaborator = () => {
+    if (!tempCollaborator.collaboratorId) {
+      toast.error('Selecione um profissional');
+      return;
+    }
+    const collaborator = collaborators.find((c) => c.id === tempCollaborator.collaboratorId);
+    if (selectedCollaborators.some((c) => c.collaboratorId === tempCollaborator.collaboratorId)) {
+      toast.error('Profissional já adicionado');
+      return;
+    }
+    setSelectedCollaborators([
+      ...selectedCollaborators,
+      {
+        collaboratorId: tempCollaborator.collaboratorId,
+        timeMinutes: parseInt(tempCollaborator.timeMinutes) || 60,
+        collaborator,
+      },
+    ]);
+    setTempCollaborator({ collaboratorId: '', timeMinutes: '60' });
+  };
+
+  const removeSupply = (supplyId: string) => {
+    setSelectedSupplies(selectedSupplies.filter((s) => s.supplyId !== supplyId));
+  };
+
+  const removeCollaborator = (collaboratorId: string) => {
+    setSelectedCollaborators(
+      selectedCollaborators.filter((c) => c.collaboratorId !== collaboratorId)
+    );
+  };
+
+  // Calculate costs
+  const supplyCost = selectedSupplies.reduce((acc, ps) => {
+    const supply = ps.supply || supplies.find((s) => s.id === ps.supplyId);
+    return acc + (supply?.costPerUnit || 0) * ps.quantity;
+  }, 0);
+
+  const laborCost = selectedCollaborators.reduce((acc, pc) => {
+    const collaborator = pc.collaborator || collaborators.find((c) => c.id === pc.collaboratorId);
+    const hourlyRate = collaborator?.hourlyCost || 0;
+    return acc + (hourlyRate * pc.timeMinutes) / 60;
+  }, 0);
+
+  const totalCost = supplyCost + laborCost;
+  const salePrice = parseFloat(formData.price) || 0;
+  const profit = salePrice - totalCost;
+  const profitMargin = salePrice > 0 ? (profit / salePrice) * 100 : 0;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!formData.name || !formData.price) {
+      toast.error('Preencha o nome e o preço do procedimento');
+      return;
+    }
+
+    try {
+      const url = editingProcedure
+        ? `/api/procedures/${editingProcedure.id}`
+        : '/api/procedures';
+      const method = editingProcedure ? 'PATCH' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...formData,
+          price: parseFloat(formData.price),
+          duration: parseInt(formData.duration) || 0,
+          supplies: selectedSupplies.map((s) => ({
+            supplyId: s.supplyId,
+            quantity: s.quantity,
+          })),
+          collaborators: selectedCollaborators.map((c) => ({
+            collaboratorId: c.collaboratorId,
+            timeMinutes: c.timeMinutes,
+          })),
+        }),
+      });
+
+      if (res.ok) {
+        toast.success(
+          editingProcedure
+            ? 'Procedimento atualizado com sucesso!'
+            : 'Procedimento cadastrado com sucesso!'
+        );
+        resetForm();
+        fetchData();
+      } else {
+        const data = await res.json();
+        toast.error(data.error || 'Erro ao salvar procedimento');
+      }
+    } catch (error) {
+      console.error('Error saving procedure:', error);
+      toast.error('Erro ao salvar procedimento');
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir este procedimento?')) return;
+
+    try {
+      const res = await fetch(`/api/procedures/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        toast.success('Procedimento excluído com sucesso!');
+        fetchData();
+      } else {
+        toast.error('Erro ao excluir procedimento');
+      }
+    } catch (error) {
+      console.error('Error deleting procedure:', error);
+      toast.error('Erro ao excluir procedimento');
+    }
+  };
+
+  const filteredProcedures = procedures.filter((p) =>
+    p.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(value);
+  };
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Procedimentos</h1>
+        <p className="text-gray-600 dark:text-gray-400">
+          Cadastre os procedimentos realizados na clínica e seus custos operacionais.
+        </p>
+      </div>
+
+      {/* Two Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column - Form */}
+        <div className="lg:col-span-2 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>{editingProcedure ? 'Editar Procedimento' : 'Novo Procedimento'}</span>
+                {editingProcedure && (
+                  <Button variant="ghost" size="sm" onClick={resetForm}>
+                    Cancelar edição
+                  </Button>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Basic Info */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2 md:col-span-1">
+                    <Label>Nome do Procedimento *</Label>
+                    <Input
+                      placeholder="Ex: Botox, Drenagem..."
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Preço Unitário (R$) *</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0,00"
+                      value={formData.price}
+                      onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Duração Média (min)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      placeholder="60"
+                      value={formData.duration}
+                      onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                {/* Supplies Section */}
+                <div className="border rounded-lg p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-purple-700">
+                    <Package className="h-5 w-5" />
+                    <h3 className="font-semibold">Insumos (Custos Variáveis)</h3>
+                  </div>
+                  <div className="flex gap-2 items-end">
+                    <div className="flex-1">
+                      <Label className="text-xs">Selecione o insumo</Label>
+                      <Select
+                        value={tempSupply.supplyId}
+                        onValueChange={(value) => setTempSupply({ ...tempSupply, supplyId: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {supplies.map((supply) => (
+                            <SelectItem key={supply.id} value={supply.id}>
+                              {supply.name} ({formatCurrency(supply.costPerUnit)}/{supply.unit})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="w-24">
+                      <Label className="text-xs">Qtd</Label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        min="0.1"
+                        value={tempSupply.quantity}
+                        onChange={(e) => setTempSupply({ ...tempSupply, quantity: e.target.value })}
+                      />
+                    </div>
+                    <Button type="button" onClick={addSupply} size="icon" className="bg-purple-600 hover:bg-purple-700">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  {selectedSupplies.length > 0 && (
+                    <div className="space-y-2 mt-3">
+                      {selectedSupplies.map((ps) => {
+                        const supply = ps.supply || supplies.find((s) => s.id === ps.supplyId);
+                        const cost = (supply?.costPerUnit || 0) * ps.quantity;
+                        return (
+                          <div
+                            key={ps.supplyId}
+                            className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 px-3 py-2 rounded"
+                          >
+                            <span className="text-sm">
+                              {supply?.name} x {ps.quantity}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-purple-700">
+                                {formatCurrency(cost)}
+                              </span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => removeSupply(ps.supplyId)}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {selectedSupplies.length === 0 && (
+                    <p className="text-sm text-gray-400 italic">Nenhum insumo adicionado ao procedimento.</p>
+                  )}
+                </div>
+
+                {/* Collaborators Section */}
+                <div className="border rounded-lg p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-purple-700">
+                    <Users className="h-5 w-5" />
+                    <h3 className="font-semibold">Mão de Obra (Técnica)</h3>
+                  </div>
+                  <div className="flex gap-2 items-end">
+                    <div className="flex-1">
+                      <Label className="text-xs">Selecione o profissional</Label>
+                      <Select
+                        value={tempCollaborator.collaboratorId}
+                        onValueChange={(value) =>
+                          setTempCollaborator({ ...tempCollaborator, collaboratorId: value })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {collaborators.map((collab) => (
+                            <SelectItem key={collab.id} value={collab.id}>
+                              {collab.name} - {collab.role} ({formatCurrency(collab.hourlyCost)}/h)
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="w-24">
+                      <Label className="text-xs">Min</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={tempCollaborator.timeMinutes}
+                        onChange={(e) =>
+                          setTempCollaborator({ ...tempCollaborator, timeMinutes: e.target.value })
+                        }
+                      />
+                    </div>
+                    <Button type="button" onClick={addCollaborator} size="icon" className="bg-purple-600 hover:bg-purple-700">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  {selectedCollaborators.length > 0 && (
+                    <div className="space-y-2 mt-3">
+                      {selectedCollaborators.map((pc) => {
+                        const collaborator =
+                          pc.collaborator || collaborators.find((c) => c.id === pc.collaboratorId);
+                        const cost = ((collaborator?.hourlyCost || 0) * pc.timeMinutes) / 60;
+                        return (
+                          <div
+                            key={pc.collaboratorId}
+                            className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 px-3 py-2 rounded"
+                          >
+                            <span className="text-sm">
+                              {collaborator?.name} ({pc.timeMinutes} min)
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-purple-700">
+                                {formatCurrency(cost)}
+                              </span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => removeCollaborator(pc.collaboratorId)}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {selectedCollaborators.length === 0 && (
+                    <p className="text-sm text-gray-400 italic">
+                      Nenhum profissional alocado ao procedimento.
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <Button type="submit" className="bg-purple-600 hover:bg-purple-700 text-white">
+                    {editingProcedure ? 'Salvar Alterações' : 'Salvar Procedimento'}
+                  </Button>
+                  {editingProcedure && (
+                    <Button type="button" variant="outline" onClick={resetForm}>
+                      Cancelar
+                    </Button>
+                  )}
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Column - Profitability Summary */}
+        <div className="lg:col-span-1">
+          <div className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-lg p-6 text-white shadow-lg sticky top-6">
+            <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              Resumo de Lucratividade
+            </h3>
+
+            <div className="space-y-4">
+              {/* Preço de Venda */}
+              <div className="flex items-center justify-between">
+                <span className="text-white dark:text-purple-100 text-sm">Preço de Venda</span>
+                <span className="text-2xl font-bold">
+                  {formatCurrency(salePrice)}
+                </span>
+              </div>
+
+              {/* Custos */}
+              <div className="space-y-2 pt-2 border-t border-white/20">
+                <div className="flex items-center justify-between">
+                  <span className="text-white dark:text-purple-100 text-sm flex items-center gap-1">
+                    <Package className="h-4 w-4" />
+                    Custo Insumos
+                  </span>
+                  <span className="text-lg font-semibold text-red-300">
+                    -{formatCurrency(supplyCost)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-white dark:text-purple-100 text-sm flex items-center gap-1">
+                    <Users className="h-4 w-4" />
+                    Custo Mão de Obra
+                  </span>
+                  <span className="text-lg font-semibold text-red-300">
+                    -{formatCurrency(laborCost)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Custo Total */}
+              <div className="flex items-center justify-between pt-2 border-t border-white/20">
+                <span className="text-white dark:text-purple-100 text-sm font-medium">Custo Total</span>
+                <span className="text-lg font-semibold text-red-300">
+                  {formatCurrency(totalCost)}
+                </span>
+              </div>
+
+              {/* Lucro Líquido */}
+              <div className="bg-white dark:bg-gray-900/10 rounded-lg p-4 mt-4">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-white dark:text-purple-100 text-sm flex items-center gap-1">
+                    <TrendingUp className="h-4 w-4" />
+                    Lucro Líquido
+                  </span>
+                  <span
+                    className={`text-xl font-bold ${
+                      profitMargin >= 0 ? 'text-green-600 dark:text-green-300' : 'text-red-300'
+                    }`}
+                  >
+                    {profitMargin >= 0 ? '+' : ''}{profitMargin.toFixed(1)}%
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span
+                    className={`text-2xl font-bold ${
+                      profit >= 0 ? 'text-green-600 dark:text-green-300' : 'text-red-300'
+                    }`}
+                  >
+                    {formatCurrency(profit)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Procedures Catalog */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <CardTitle>Catálogo de Procedimentos</CardTitle>
+            <div className="relative w-full md:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Buscar..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+            </div>
+          ) : filteredProcedures.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-gray-500 dark:text-gray-400">
+              <Stethoscope className="h-12 w-12 mb-4 text-gray-300" />
+              <p>Nenhum procedimento cadastrado ainda.</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nome</TableHead>
+                  <TableHead className="text-center">Insumos</TableHead>
+                  <TableHead className="text-center">Profissionais</TableHead>
+                  <TableHead className="text-right">Preço Venda</TableHead>
+                  <TableHead className="text-center">Margem Est.</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredProcedures.map((procedure) => {
+                  const procSupplyCost = (procedure.supplies || []).reduce((acc, ps) => {
+                    const supply = supplies.find((s) => s.id === ps.supplyId);
+                    return acc + (supply?.costPerUnit || 0) * ps.quantity;
+                  }, 0);
+                  const procLaborCost = (procedure.collaborators || []).reduce((acc, pc) => {
+                    const collab = collaborators.find((c) => c.id === pc.collaboratorId);
+                    return acc + ((collab?.hourlyCost || 0) * pc.timeMinutes) / 60;
+                  }, 0);
+                  const procProfit = procedure.price - procSupplyCost - procLaborCost;
+                  const procMargin =
+                    procedure.price > 0 ? (procProfit / procedure.price) * 100 : 0;
+
+                  return (
+                    <TableRow key={procedure.id}>
+                      <TableCell className="font-medium">{procedure.name}</TableCell>
+                      <TableCell className="text-center">
+                        {procedure.supplies?.length || 0}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {procedure.collaborators?.length || 0}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(procedure.price)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge
+                          variant={
+                            procMargin >= 30 ? 'default' : procMargin >= 0 ? 'secondary' : 'destructive'
+                          }
+                          className={procMargin >= 30 ? 'bg-green-500' : ''}
+                        >
+                          {procMargin.toFixed(1)}%
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => loadProcedureForEdit(procedure)}
+                            className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-purple-600"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDelete(procedure.id)}
+                            className="h-8 w-8 text-gray-500 dark:text-gray-400 hover:text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

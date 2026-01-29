@@ -1,0 +1,552 @@
+generator client {
+    provider = "prisma-client-js"
+    binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
+    output = "/home/ubuntu/cliniprice/nextjs_space/node_modules/.prisma/client"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+// Authentication models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String
+  fullName      String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  accounts      Account[]
+  sessions      Session[]
+  workspaces    Workspace[]
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Multi-tenant workspace model
+model Workspace {
+  id          String   @id @default(cuid())
+  name        String   // Clinic name
+  ownerId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  owner         User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  patients      Patient[]
+  procedures    Procedure[]
+  sales         Sale[]
+  supplies      Supply[]
+  collaborators Collaborator[]
+  costs         Cost[]
+  packages      Package[]
+  cardFeeRules  CardFeeRule[]
+  quotes        Quote[]
+}
+
+// Supply model - Insumos da clínica
+model Supply {
+  id           String   @id @default(cuid())
+  workspaceId  String
+  name         String   // Nome do insumo (ex: "Toxina Botulínica 50U")
+  unit         String   // Unidade de medida (Frasco, Seringa, Par, Pacote, Aplicação, Unidade)
+  costPerUnit  Float    // Custo por unidade em R$
+  stockQty     Int      @default(0) // Quantidade em estoque
+  minStock     Int      @default(0) // Estoque mínimo para alerta
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  workspace    Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  procedures   ProcedureSupply[]
+  
+  @@unique([workspaceId, name, unit]) // Evita duplicação de insumos com mesmo nome + unidade
+  @@index([workspaceId])
+}
+
+// Enum for commission type
+enum CommissionType {
+  PERCENTAGE  // Comissão em percentual (%)
+  FIXED       // Comissão fixa em R$
+}
+
+// Collaborator model - Profissionais da clínica
+model Collaborator {
+  id               String          @id @default(cuid())
+  workspaceId      String
+  
+  // Dados pessoais
+  name             String          // Nome completo
+  cpf              String?         // CPF
+  rg               String?         // RG
+  birthDate        DateTime?       // Data de nascimento
+  phone            String?         // Telefone/WhatsApp
+  email            String?         // E-mail
+  address          String?         // Endereço
+  city             String?         // Cidade
+  state            String?         // Estado (UF)
+  zipCode          String?         // CEP
+  
+  // Dados profissionais
+  role             String          // Função (ex: "Esteticista", "Médico", "Assistente")
+  admissionDate    DateTime?       // Data de admissão
+  isActive         Boolean         @default(true)
+  
+  // Dados financeiros
+  baseSalary       Float           @default(0) // Salário base fixo mensal
+  commissionType   CommissionType  @default(PERCENTAGE) // Tipo de comissão
+  commissionValue  Float           @default(0) // Valor ou % de comissão
+  charges          Float           @default(0) // Encargos fixos mensais (INSS, etc)
+  monthlyHours     Int             @default(160) // Carga horária mensal
+  
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  
+  workspace        Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  procedures       ProcedureCollaborator[]
+  quotes           Quote[]                 // Orçamentos criados por este profissional
+  
+  @@index([workspaceId])
+}
+
+// Junction table: Procedure <-> Supply with quantity used
+model ProcedureSupply {
+  id           String    @id @default(cuid())
+  procedureId  String
+  supplyId     String
+  quantity     Float     // Quantidade usada por procedimento
+  
+  procedure    Procedure @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+  supply       Supply    @relation(fields: [supplyId], references: [id], onDelete: Cascade)
+  
+  @@unique([procedureId, supplyId])
+  @@index([procedureId])
+  @@index([supplyId])
+}
+
+// Junction table: Procedure <-> Collaborator with time spent
+model ProcedureCollaborator {
+  id             String       @id @default(cuid())
+  procedureId    String
+  collaboratorId String
+  timeMinutes    Int          // Tempo em minutos gasto pelo profissional
+  
+  procedure      Procedure    @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+  collaborator   Collaborator @relation(fields: [collaboratorId], references: [id], onDelete: Cascade)
+  
+  @@unique([procedureId, collaboratorId])
+  @@index([procedureId])
+  @@index([collaboratorId])
+}
+
+// Patient model
+model Patient {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  email       String?
+  phone       String   // WhatsApp/Phone (required)
+  notes       String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sales        Sale[]
+  quotes       Quote[]
+  
+  @@unique([workspaceId, name, phone]) // Evita duplicação de pacientes com mesmo nome + telefone
+  @@index([workspaceId])
+}
+
+// Procedure model - Procedimentos estéticos com custo detalhado
+model Procedure {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  price       Float    // Preço de venda em R$
+  duration    Int      // Duração média em minutos
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  workspace      Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  saleItems      SaleItem[]
+  sessions       ProcedureSession[]
+  supplies       ProcedureSupply[]       // Insumos usados no procedimento
+  collaborators  ProcedureCollaborator[] // Profissionais envolvidos
+  packageItems   PackageItem[]           // Pacotes que incluem este procedimento
+  quoteItems     QuoteItem[]             // Orçamentos que incluem este procedimento
+  
+  @@index([workspaceId])
+}
+
+// Sale model - Represents the financial transaction (Venda/Negociação)
+model Sale {
+  id               String        @id @default(cuid())
+  workspaceId      String
+  patientId        String
+  saleDate         DateTime      @default(now()) // Data da venda
+  totalAmount      Float         // Valor total cobrado
+  paymentMethod    PaymentMethod? // Forma de pagamento (deprecated - usar PaymentSplit)
+  installments     Int           @default(1) // Número de parcelas (deprecated - usar PaymentSplit)
+  paymentStatus    PaymentStatus @default(PENDING)
+  notes            String?       @db.Text
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  
+  workspace        Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  patient          Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  items            SaleItem[]         // Procedimentos incluídos na venda
+  sessions         ProcedureSession[] // Sessões de execução
+  paymentSplits    PaymentSplit[]     // Split de pagamentos (nova feature)
+  
+  @@index([workspaceId])
+  @@index([patientId])
+  @@index([saleDate])
+}
+
+// Sale Item - Procedures included in the sale with quantity (pacotes)
+model SaleItem {
+  id            String   @id @default(cuid())
+  saleId        String
+  procedureId   String
+  quantity      Int      // Quantidade de sessões compradas
+  unitPrice     Float    // Preço unitário no momento da venda
+  
+  sale          Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  procedure     Procedure @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+  
+  @@index([saleId])
+}
+
+// Payment Split - Representa cada forma de pagamento em uma venda
+model PaymentSplit {
+  id              String        @id @default(cuid())
+  saleId          String
+  paymentMethod   PaymentMethod // Forma de pagamento deste split
+  amount          Float         // Valor total deste split em R$
+  installments    Int           @default(1) // Número de parcelas (1 = à vista)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  sale            Sale                  @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  installmentDetails PaymentInstallment[] // Detalhes de cada parcela
+  
+  @@index([saleId])
+}
+
+// Payment Installment - Representa cada parcela de um PaymentSplit
+model PaymentInstallment {
+  id                String        @id @default(cuid())
+  paymentSplitId    String
+  installmentNumber Int           // Número da parcela (1, 2, 3...)
+  amount            Float         // Valor desta parcela em R$
+  dueDate           DateTime?     // Data de vencimento/recebimento esperado
+  receivedDate      DateTime?     // Data em que foi efetivamente recebido
+  status            PaymentStatus @default(PENDING) // Status desta parcela
+  notes             String?       @db.Text
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  paymentSplit      PaymentSplit  @relation(fields: [paymentSplitId], references: [id], onDelete: Cascade)
+  
+  @@unique([paymentSplitId, installmentNumber]) // Evita duplicação de números de parcela
+  @@index([paymentSplitId])
+  @@index([dueDate])
+  @@index([status])
+}
+
+// Procedure Session - Execution of individual sessions (Sessões de Execução)
+model ProcedureSession {
+  id              String           @id @default(cuid())
+  saleId          String
+  procedureId     String
+  scheduledDate   DateTime?        // Data agendada para a sessão
+  completedDate   DateTime?        // Data de conclusão
+  status          SessionStatus    @default(PENDING)
+  appointmentType AppointmentType? // Tipo de consulta (primeira consulta, pendência, retorno)
+  notes           String?          @db.Text
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  
+  sale          Sale          @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  procedure     Procedure     @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+  
+  @@index([saleId])
+  @@index([scheduledDate])
+  @@index([status])
+  @@index([appointmentType])
+}
+
+enum PaymentMethod {
+  CASH_PIX      // Dinheiro / Pix
+  CREDIT_CARD   // Cartão de Crédito
+  DEBIT_CARD    // Cartão de Débito
+  BANK_SLIP     // Boleto
+}
+
+enum PaymentStatus {
+  PENDING       // Pendente
+  PARTIAL       // Parcialmente pago
+  PAID          // Pago
+  OVERDUE       // Atrasado
+}
+
+enum SessionStatus {
+  PENDING       // Sessão pendente
+  SCHEDULED     // Agendada
+  COMPLETED     // Concluída
+  CANCELLED     // Cancelada
+}
+
+enum AppointmentType {
+  FIRST_VISIT      // 🔴 Primeira Consulta - Paciente novo
+  PAYMENT_PENDING  // 🟡 Pendência Financeira - Cobrança em aberto
+  FOLLOW_UP        // 🟢 Retorno/Acompanhamento - Continuidade do tratamento
+}
+
+enum CostType {
+  FIXED       // Valor fixo em reais
+  PERCENTAGE  // Percentual sobre vendas
+}
+
+enum CostCategory {
+  OPERATIONAL // Custos operacionais (aluguel, energia, etc)
+  TAX         // Impostos e taxas
+  COMMISSION  // Comissões
+  CARD        // Taxas de cartão
+  CUSTOM      // Categoria customizada
+}
+
+enum RecurrenceType {
+  INDEFINITE    // Recorrência por prazo indeterminado (continua todo mês)
+  INSTALLMENTS  // Parcelado (número fixo de parcelas - ex: 10x, 12x)
+}
+
+// Cost model - Custos fixos e variáveis da clínica
+model Cost {
+  id             String          @id @default(cuid())
+  workspaceId    String
+  description    String          // Descrição do custo (ex: "Aluguel Clínica", "Imposto ICMS")
+  costType       CostType        // FIXED ou PERCENTAGE
+  category       CostCategory    @default(OPERATIONAL) // Categoria do custo
+  customCategory String?         // Nome da categoria customizada (usado quando category = CUSTOM)
+  
+  // Valor fixo mensal (usado quando costType = FIXED)
+  fixedValue     Float?          // Valor em R$
+  
+  // Percentual sobre vendas (usado quando costType = PERCENTAGE)
+  percentage     Float?          // Percentual (ex: 5.5 para 5.5%)
+  
+  // Campos específicos para taxas de cartão (usado quando category = CARD)
+  cardOperator   String?         // Operadora do cartão (ex: "Cielo", "Stone", "PagSeguro")
+  receivingDays  Int?            // Prazo de recebimento em dias (ex: 30 dias)
+  
+  paymentDate    DateTime?       // Data de pagamento da despesa (opcional)
+  isRecurring    Boolean         @default(true) // Se é recorrente mensal
+  isActive       Boolean         @default(true) // Se está ativo
+  
+  // Campos para recorrência automática
+  recurrenceFrequency String?    @default("MONTHLY") // MONTHLY, QUARTERLY, YEARLY
+  nextRecurrenceDate DateTime?   // Próxima data de lançamento automático
+  
+  // Campos para custos parcelados
+  recurrenceType     RecurrenceType @default(INDEFINITE) // Tipo de recorrência
+  totalInstallments  Int?           // Número total de parcelas (usado quando recurrenceType = INSTALLMENTS)
+  currentInstallment Int?           @default(0) // Parcela atual (0 = não iniciado, 1-N = em andamento)
+  
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  installments   CostInstallment[] // Parcelas do custo (quando parcelado)
+  
+  @@index([workspaceId])
+  @@index([costType])
+  @@index([isActive])
+  @@index([nextRecurrenceDate])
+}
+
+// Cost Installment - Representa cada parcela de um custo fixo parcelado
+model CostInstallment {
+  id                String        @id @default(cuid())
+  costId            String
+  installmentNumber Int           // Número da parcela (1, 2, 3...)
+  amount            Float         // Valor desta parcela em R$
+  dueDate           DateTime      // Data de vencimento
+  paidDate          DateTime?     // Data em que foi efetivamente pago
+  status            PaymentStatus @default(PENDING) // Status desta parcela
+  notes             String?       @db.Text
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  cost              Cost          @relation(fields: [costId], references: [id], onDelete: Cascade)
+  
+  @@unique([costId, installmentNumber]) // Evita duplicação de números de parcela
+  @@index([costId])
+  @@index([dueDate])
+  @@index([status])
+}
+
+// Card Fee Rule - Taxas de cartão diferenciadas por quantidade de parcelas
+model CardFeeRule {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  costId          String?  // Link para o custo de cartão (Cost com category=CARD) - opcional
+  cardOperator    String   @default("Rede") // Nome da operadora (ex: "Rede", "Stone", "PagSeguro")
+  cardType        String   @default("CREDIT") // Tipo do cartão: "DEBIT" ou "CREDIT"
+  installmentCount Int     @default(1) // Número exato de parcelas (ex: 1, 2, 3, etc)
+  feePercentage   Float    // Taxa percentual (ex: 1.5 para 1,5%)
+  receivingDays   Int      @default(30) // Prazo de recebimento em dias (ex: 30)
+  isActive        Boolean  @default(true)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  
+  @@index([workspaceId])
+  @@index([isActive])
+}
+
+// Package model - Pacotes promocionais de procedimentos
+model Package {
+  id              String          @id @default(cuid())
+  workspaceId     String
+  name            String          // Nome do pacote (ex: "Protocolo Noiva Completo")
+  finalPrice      Float           // Preço final do pacote em R$
+  discountPercent Float           @default(0) // Desconto percentual aplicado
+  isActive        Boolean         @default(true)
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  items           PackageItem[]   // Procedimentos incluídos no pacote
+  
+  @@index([workspaceId])
+  @@index([isActive])
+}
+
+// PackageItem - Procedimentos incluídos em um pacote
+model PackageItem {
+  id            String      @id @default(cuid())
+  packageId     String
+  procedureId   String
+  quantity      Int         @default(1) // Quantidade de sessões do procedimento
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  
+  package       Package     @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  procedure     Procedure   @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+  
+  @@unique([packageId, procedureId])
+  @@index([packageId])
+  @@index([procedureId])
+}
+
+// Quote model - Orçamentos/Propostas para pacientes
+enum QuoteStatus {
+  PENDING    // Pendente (aguardando resposta)
+  SENT       // Enviado ao paciente
+  ACCEPTED   // Aceito (convertido em venda)
+  REJECTED   // Rejeitado
+  EXPIRED    // Expirado
+}
+
+model Quote {
+  id                String      @id @default(cuid())
+  workspaceId       String
+  patientId         String
+  collaboratorId    String?     // Profissional responsável pelo orçamento
+  title             String      // Título do orçamento (ex: "Tratamento Facial")
+  totalAmount       Float       // Valor total do orçamento
+  discountPercent   Float       @default(0) // Desconto aplicado (%)
+  discountAmount    Float       @default(0) // Desconto em R$
+  finalAmount       Float       // Valor final com desconto
+  
+  status            QuoteStatus @default(PENDING)
+  notes             String?     @db.Text // Observações
+  
+  // Tracking de conversão
+  createdDate       DateTime    @default(now()) // Data de criação
+  sentDate          DateTime?   // Data de envio ao paciente
+  expirationDate    DateTime?   // Data de validade
+  acceptedDate      DateTime?   // Data de aceite
+  rejectedDate      DateTime?   // Data de rejeição
+  saleId            String?     @unique // ID da venda (se convertido)
+  
+  // Origem do lead
+  leadSource        String?     // Origem do paciente (Instagram, Google, Indicação, etc)
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  
+  workspace         Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  patient           Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  collaborator      Collaborator? @relation(fields: [collaboratorId], references: [id])
+  items             QuoteItem[]
+  
+  @@index([workspaceId])
+  @@index([patientId])
+  @@index([collaboratorId])
+  @@index([status])
+  @@index([createdDate])
+  @@index([leadSource])
+}
+
+// QuoteItem - Procedimentos incluídos no orçamento
+model QuoteItem {
+  id            String      @id @default(cuid())
+  quoteId       String
+  procedureId   String?     // Opcional: pode ser um procedimento customizado
+  description   String      // Descrição do item
+  quantity      Int         @default(1) // Quantidade de sessões
+  unitPrice     Float       // Preço unitário
+  totalPrice    Float       // Preço total (quantidade × unitPrice)
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  
+  quote         Quote       @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  procedure     Procedure?  @relation(fields: [procedureId], references: [id])
+  
+  @@index([quoteId])
+  @@index([procedureId])
+}

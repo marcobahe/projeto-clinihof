@@ -1,0 +1,429 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useSession } from 'next-auth/react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { toast } from '@/hooks/use-toast';
+import { User, Building2, Mail, Lock, Loader2, Upload, Check } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
+
+export default function AccountPage() {
+  const { data: session, update } = useSession() || {};
+  const [isLoading, setIsLoading] = useState(false);
+  const [isPasswordLoading, setIsPasswordLoading] = useState(false);
+  const [profileData, setProfileData] = useState({
+    fullName: '',
+    clinicName: '',
+    email: '',
+  });
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string>('');
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const response = await fetch('/api/account/profile');
+        if (response.ok) {
+          const data = await response.json();
+          setProfileData({
+            fullName: data.fullName || '',
+            clinicName: data.clinicName || '',
+            email: data.email || '',
+          });
+          setAvatarPreview(data.image || '');
+        }
+      } catch (error) {
+        console.error('Error fetching profile:', error);
+      }
+    };
+
+    if (session) {
+      fetchProfile();
+    }
+  }, [session]);
+
+  const handleProfileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      const response = await fetch('/api/account/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profileData),
+      });
+
+      if (!response.ok) {
+        throw new Error();
+      }
+
+      await update();
+
+      toast({
+        title: 'Sucesso',
+        description: 'Perfil atualizado com sucesso',
+      });
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: 'Erro ao atualizar perfil',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast({
+        title: 'Erro',
+        description: 'As senhas não coincidem',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsPasswordLoading(true);
+
+    try {
+      const response = await fetch('/api/account/password', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword: passwordData.currentPassword,
+          newPassword: passwordData.newPassword,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast({
+          title: 'Erro',
+          description: data.error || 'Erro ao alterar senha',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      toast({
+        title: 'Sucesso',
+        description: 'Senha alterada com sucesso',
+      });
+
+      setPasswordData({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+      });
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: 'Erro ao alterar senha',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsPasswordLoading(false);
+    }
+  };
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setAvatarFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setAvatarPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleAvatarUpload = async () => {
+    if (!avatarFile) return;
+
+    setIsLoading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', avatarFile);
+
+      const response = await fetch('/api/account/upload-avatar', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error();
+      }
+
+      await update();
+
+      toast({
+        title: 'Sucesso',
+        description: 'Foto de perfil atualizada com sucesso',
+      });
+
+      setAvatarFile(null);
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: 'Erro ao atualizar foto de perfil',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const userInitials = profileData.fullName
+    ?.split(' ')
+    ?.map((n) => n?.[0])
+    ?.join('')
+    ?.toUpperCase() ?? 'U';
+
+  const memberSince = session?.user
+    ? new Date((session.user as any).createdAt || Date.now()).getFullYear()
+    : new Date().getFullYear();
+
+  return (
+    <div>
+      <div className="mb-8">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">Minha Conta</h1>
+        <p className="text-gray-600 dark:text-gray-400 mt-1">Gerencie suas informações pessoais e configurações</p>
+      </div>
+
+      <div className="grid gap-4 md:gap-6 md:grid-cols-3">
+        <div className="md:col-span-2 space-y-6">
+          {/* Profile Information */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <User className="w-5 h-5 text-purple-600" />
+                Informações do Perfil
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleProfileSubmit} className="space-y-4">
+                <div>
+                  <Label htmlFor="fullName">Nome Completo</Label>
+                  <Input
+                    id="fullName"
+                    value={profileData.fullName}
+                    onChange={(e) =>
+                      setProfileData({ ...profileData, fullName: e.target.value })
+                    }
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="clinicName">Nome da Clínica</Label>
+                  <Input
+                    id="clinicName"
+                    value={profileData.clinicName}
+                    onChange={(e) =>
+                      setProfileData({ ...profileData, clinicName: e.target.value })
+                    }
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="email">E-mail</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={profileData.email}
+                    disabled
+                    className="bg-gray-50 dark:bg-gray-800"
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    O e-mail não pode ser alterado
+                  </p>
+                </div>
+
+                <Button
+                  type="submit"
+                  className="bg-purple-600 hover:bg-purple-700"
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Salvando...
+                    </>
+                  ) : (
+                    'Salvar Alterações'
+                  )}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+
+          {/* Password Change */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Lock className="w-5 h-5 text-teal-600" />
+                Alterar Senha
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handlePasswordSubmit} className="space-y-4">
+                <div>
+                  <Label htmlFor="currentPassword">Senha Atual</Label>
+                  <Input
+                    id="currentPassword"
+                    type="password"
+                    value={passwordData.currentPassword}
+                    onChange={(e) =>
+                      setPasswordData({ ...passwordData, currentPassword: e.target.value })
+                    }
+                    required
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="newPassword">Nova Senha</Label>
+                  <Input
+                    id="newPassword"
+                    type="password"
+                    value={passwordData.newPassword}
+                    onChange={(e) =>
+                      setPasswordData({ ...passwordData, newPassword: e.target.value })
+                    }
+                    required
+                    minLength={6}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="confirmPassword">Confirmar Nova Senha</Label>
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    value={passwordData.confirmPassword}
+                    onChange={(e) =>
+                      setPasswordData({ ...passwordData, confirmPassword: e.target.value })
+                    }
+                    required
+                    minLength={6}
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  className="bg-purple-600 hover:bg-purple-700"
+                  disabled={isPasswordLoading}
+                >
+                  {isPasswordLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Alterando...
+                    </>
+                  ) : (
+                    'Alterar Senha'
+                  )}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="space-y-6">
+          {/* Avatar Upload */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Foto de Perfil</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center">
+              <Avatar className="w-32 h-32 mb-4">
+                <AvatarImage src={avatarPreview} />
+                <AvatarFallback className="bg-purple-500 text-white text-3xl">
+                  {userInitials}
+                </AvatarFallback>
+              </Avatar>
+              <input
+                type="file"
+                id="avatar-upload"
+                accept="image/*"
+                onChange={handleAvatarChange}
+                className="hidden"
+              />
+              <label htmlFor="avatar-upload">
+                <Button variant="outline" size="sm" asChild>
+                  <span className="cursor-pointer">
+                    <Upload className="w-4 h-4 mr-2" />
+                    Escolher Foto
+                  </span>
+                </Button>
+              </label>
+              {avatarFile && (
+                <Button
+                  size="sm"
+                  className="mt-2 w-full bg-purple-600 hover:bg-purple-700"
+                  onClick={handleAvatarUpload}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    'Salvar Foto'
+                  )}
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Plan Information */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Plano Atual</CardTitle>
+              <CardDescription>CliniHOF Basic</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div className="flex items-start gap-2">
+                  <Check className="w-5 h-5 text-green-600 mt-0.5" />
+                  <span className="text-sm">Gestão de Procedimentos Ilimitada</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <Check className="w-5 h-5 text-green-600 mt-0.5" />
+                  <span className="text-sm">Controle Financeiro Completo</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <Check className="w-5 h-5 text-green-600 mt-0.5" />
+                  <span className="text-sm">Suporte Prioritário</span>
+                </div>
+                <Separator className="my-4" />
+                <div className="text-sm text-gray-600 dark:text-gray-400">
+                  <span className="font-medium">Membro desde:</span> {memberSince}
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  disabled
+                >
+                  Gerenciar Assinatura
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}

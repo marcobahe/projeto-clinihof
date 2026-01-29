@@ -1,0 +1,1138 @@
+'use client';
+
+import { useEffect, useState, useRef } from 'react';
+import { Plus, TrendingUp, ShoppingCart, Clock, CheckCircle2, X, User, Phone, Mail, Calendar, CreditCard } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { toast } from 'sonner';
+
+interface Patient {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string | null;
+}
+
+interface Procedure {
+  id: string;
+  name: string;
+  price: number;
+}
+
+interface SaleItem {
+  id: string;
+  procedureId: string;
+  quantity: number;
+  unitPrice: number;
+  procedure: Procedure;
+}
+
+interface Session {
+  id: string;
+  procedureId: string;
+  status: string;
+  scheduledDate?: string | null;
+  completedDate?: string | null;
+  notes?: string | null;
+  procedure: Procedure;
+}
+
+interface PaymentInstallment {
+  id?: string;
+  installmentNumber: number;
+  amount: number;
+  dueDate: string;
+  status?: string;
+  notes?: string;
+}
+
+interface PaymentSplit {
+  id?: string;
+  paymentMethod: string;
+  amount: number;
+  installments: number;
+  installmentDetails: PaymentInstallment[];
+}
+
+interface Sale {
+  id: string;
+  patient: Patient;
+  saleDate: string;
+  totalAmount: number;
+  paymentMethod?: string | null;
+  installments?: number;
+  paymentStatus: string;
+  notes?: string | null;
+  items: SaleItem[];
+  sessions: Session[];
+  paymentSplits?: PaymentSplit[];
+  _count: {
+    sessions: number;
+  };
+  completedSessions: number;
+}
+
+interface Stats {
+  totalRevenue: number;
+  completedSales: number;
+  pendingSessions: number;
+  completedSessions: number;
+}
+
+export default function AppointmentsPage() {
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [procedures, setProcedures] = useState<Procedure[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Modal state
+  const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Form state
+  const [selectedPatient, setSelectedPatient] = useState('');
+  const [selectedProcedure, setSelectedProcedure] = useState('');
+  const [quantity, setQuantity] = useState('1');
+  const [saleDate, setSaleDate] = useState('');
+  
+  // Payment splits state
+  const [paymentSplits, setPaymentSplits] = useState<PaymentSplit[]>([]);
+  const [currentSplitMethod, setCurrentSplitMethod] = useState('CASH_PIX');
+  const [currentSplitAmount, setCurrentSplitAmount] = useState('');
+  const [currentSplitInstallments, setCurrentSplitInstallments] = useState(1);
+
+  // Procedure dropdown state
+  const [isProcedureDropdownOpen, setIsProcedureDropdownOpen] = useState(false);
+  const [procedureSearch, setProcedureSearch] = useState('');
+  const [showNewProcedureForm, setShowNewProcedureForm] = useState(false);
+  const [newProcedure, setNewProcedure] = useState({ name: '', price: '', duration: '' });
+  const procedureDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Set initial date on client side to avoid hydration mismatch
+    setSaleDate(new Date().toISOString().split('T')[0]);
+    loadData();
+  }, []);
+
+  // Click outside handler for procedure dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (procedureDropdownRef.current && !procedureDropdownRef.current.contains(event.target as Node)) {
+        setIsProcedureDropdownOpen(false);
+        setShowNewProcedureForm(false);
+        setProcedureSearch('');
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [statsRes, salesRes, patientsRes, proceduresRes] = await Promise.all([
+        fetch('/api/sales/stats'),
+        fetch('/api/sales'),
+        fetch('/api/patients'),
+        fetch('/api/procedures'),
+      ]);
+
+      if (statsRes.ok) setStats(await statsRes.json());
+      if (salesRes.ok) setSales(await salesRes.json());
+      if (patientsRes.ok) setPatients(await patientsRes.json());
+      if (proceduresRes.ok) setProcedures(await proceduresRes.json());
+    } catch (error) {
+      console.error('Error loading data:', error);
+      toast.error('Erro ao carregar dados');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSelectProcedure = (procedureId: string) => {
+    setSelectedProcedure(procedureId);
+    setIsProcedureDropdownOpen(false);
+    setProcedureSearch('');
+  };
+
+  const handleCreateNewProcedure = async () => {
+    if (!newProcedure.name || !newProcedure.price) {
+      toast.error('Preencha o nome e o preço do procedimento');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/procedures', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newProcedure.name,
+          price: parseFloat(newProcedure.price),
+          duration: parseInt(newProcedure.duration) || 0,
+          supplies: [],
+          collaborators: [],
+        }),
+      });
+
+      if (res.ok) {
+        const created = await res.json();
+        toast.success('Procedimento cadastrado!');
+        setNewProcedure({ name: '', price: '', duration: '' });
+        setShowNewProcedureForm(false);
+        setProcedureSearch('');
+        await loadData();
+        setSelectedProcedure(created.id);
+        setIsProcedureDropdownOpen(false);
+      } else {
+        const error = await res.json();
+        toast.error(error.error || 'Erro ao cadastrar procedimento');
+      }
+    } catch (error) {
+      console.error('Error creating procedure:', error);
+      toast.error('Erro ao cadastrar procedimento');
+    }
+  };
+
+  const handleCreateSale = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!selectedPatient || !selectedProcedure) {
+      toast.error('Selecione um paciente e procedimento');
+      return;
+    }
+
+    if (paymentSplits.length === 0) {
+      toast.error('Adicione pelo menos uma forma de pagamento');
+      return;
+    }
+
+    const procedure = procedures.find(p => p.id === selectedProcedure);
+    if (!procedure) return;
+
+    const totalAmount = procedure.price * parseInt(quantity);
+    
+    // Validate splits sum equals total
+    const splitsTotal = paymentSplits.reduce((sum, split) => sum + split.amount, 0);
+    if (Math.abs(splitsTotal - totalAmount) > 0.01) {
+      toast.error(`A soma dos pagamentos (R$ ${splitsTotal.toFixed(2)}) deve ser igual ao total da venda (R$ ${totalAmount.toFixed(2)})`);
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/sales', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          patientId: selectedPatient,
+          saleDate,
+          totalAmount,
+          items: [
+            {
+              procedureId: selectedProcedure,
+              quantity: parseInt(quantity),
+              unitPrice: procedure.price,
+            },
+          ],
+          paymentSplits: paymentSplits,
+        }),
+      });
+
+      if (res.ok) {
+        toast.success('Venda cadastrada com sucesso!');
+        setSelectedPatient('');
+        setSelectedProcedure('');
+        setQuantity('1');
+        setPaymentSplits([]);
+        setCurrentSplitAmount('');
+        setCurrentSplitMethod('CASH_PIX');
+        setCurrentSplitInstallments(1);
+        setSaleDate(new Date().toISOString().split('T')[0]);
+        loadData();
+      } else {
+        const error = await res.json();
+        toast.error(error.error || 'Erro ao cadastrar venda');
+      }
+    } catch (error) {
+      console.error('Error creating sale:', error);
+      toast.error('Erro ao cadastrar venda');
+    }
+  };
+
+  // Helper functions for payment splits
+  const handleAddPaymentSplit = () => {
+    const amount = parseFloat(currentSplitAmount);
+    
+    if (!amount || amount <= 0) {
+      toast.error('Informe um valor válido para o pagamento');
+      return;
+    }
+
+    const procedure = procedures.find(p => p.id === selectedProcedure);
+    if (!procedure) {
+      toast.error('Selecione um procedimento primeiro');
+      return;
+    }
+
+    const totalAmount = procedure.price * parseInt(quantity);
+    const currentTotal = paymentSplits.reduce((sum, split) => sum + split.amount, 0);
+    
+    if (currentTotal + amount > totalAmount) {
+      toast.error('O valor total dos pagamentos não pode exceder o valor da venda');
+      return;
+    }
+
+    // Generate installment details
+    const installmentDetails: PaymentInstallment[] = [];
+    const installmentAmount = amount / currentSplitInstallments;
+    
+    for (let i = 0; i < currentSplitInstallments; i++) {
+      const dueDate = new Date();
+      dueDate.setMonth(dueDate.getMonth() + i);
+      
+      installmentDetails.push({
+        installmentNumber: i + 1,
+        amount: installmentAmount,
+        dueDate: dueDate.toISOString().split('T')[0],
+        status: 'PENDING',
+      });
+    }
+
+    const newSplit: PaymentSplit = {
+      paymentMethod: currentSplitMethod,
+      amount,
+      installments: currentSplitInstallments,
+      installmentDetails,
+    };
+
+    setPaymentSplits([...paymentSplits, newSplit]);
+    setCurrentSplitAmount('');
+    setCurrentSplitInstallments(1);
+    toast.success('Forma de pagamento adicionada');
+  };
+
+  const handleRemovePaymentSplit = (index: number) => {
+    const newSplits = paymentSplits.filter((_, i) => i !== index);
+    setPaymentSplits(newSplits);
+    toast.success('Forma de pagamento removida');
+  };
+
+  const handleUpdateInstallmentDate = (splitIndex: number, installmentIndex: number, newDate: string) => {
+    const newSplits = [...paymentSplits];
+    newSplits[splitIndex].installmentDetails[installmentIndex].dueDate = newDate;
+    setPaymentSplits(newSplits);
+  };
+
+  const formatPaymentMethod = (method: string) => {
+    const labels: Record<string, string> = {
+      CASH_PIX: 'Dinheiro / Pix',
+      CREDIT_CARD: 'Cartão Crédito',
+      DEBIT_CARD: 'Cartão Débito',
+      BANK_SLIP: 'Boleto',
+    };
+    return labels[method] || method;
+  };
+
+  const handleCompleteSession = async (sessionId: string) => {
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/complete`, {
+        method: 'PATCH',
+      });
+
+      if (res.ok) {
+        toast.success('Sessão concluída!');
+        loadData();
+        // Reload sale details if modal is open
+        if (selectedSale) {
+          const saleRes = await fetch(`/api/sales/${selectedSale.id}`);
+          if (saleRes.ok) {
+            setSelectedSale(await saleRes.json());
+          }
+        }
+      } else {
+        toast.error('Erro ao concluir sessão');
+      }
+    } catch (error) {
+      console.error('Error completing session:', error);
+      toast.error('Erro ao concluir sessão');
+    }
+  };
+
+  const openSaleDetails = async (sale: Sale) => {
+    try {
+      // Fetch full sale details with sessions
+      const res = await fetch(`/api/sales/${sale.id}`);
+      if (res.ok) {
+        const fullSale = await res.json();
+        setSelectedSale(fullSale);
+        setIsModalOpen(true);
+      }
+    } catch (error) {
+      console.error('Error fetching sale details:', error);
+      toast.error('Erro ao carregar detalhes');
+    }
+  };
+
+  const filteredSales = sales.filter(sale =>
+    sale.patient.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const paymentMethodLabels: Record<string, string> = {
+    CASH_PIX: 'Dinheiro/Pix',
+    CREDIT_CARD: 'Cartão Crédito',
+    DEBIT_CARD: 'Cartão Débito',
+    BANK_SLIP: 'Boleto',
+  };
+
+  const paymentStatusLabels: Record<string, { label: string; color: string }> = {
+    PENDING: { label: 'Pendente', color: 'bg-yellow-100 text-yellow-800' },
+    PARTIAL: { label: 'Parcial', color: 'bg-orange-100 text-orange-800' },
+    PAID: { label: 'Pago', color: 'bg-green-100 text-green-800' },
+    OVERDUE: { label: 'Atrasado', color: 'bg-red-100 text-red-800' },
+  };
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(value);
+  };
+
+  if (loading) {
+    return (
+      <div className="p-8">
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/4"></div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="h-32 bg-gray-200 dark:bg-gray-700 rounded"></div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-8 space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold mb-2">Atendimentos Negociados</h1>
+        <p className="text-gray-600 dark:text-gray-400">Gerencie vendas, pacotes e a execução das sessões.</p>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Vendido</CardTitle>
+            <TrendingUp className="h-5 w-5 text-purple-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {formatCurrency(stats?.totalRevenue || 0)}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">Vendas Realizadas</CardTitle>
+            <ShoppingCart className="h-5 w-5 text-purple-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.completedSales || 0}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">Sessões Pendentes</CardTitle>
+            <Clock className="h-5 w-5 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-500">{stats?.pendingSessions || 0}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">Sessões Realizadas</CardTitle>
+            <CheckCircle2 className="h-5 w-5 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-500">{stats?.completedSessions || 0}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Two Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left Column - New Sale Form */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Nova Venda / Agendamento</CardTitle>
+            <CardDescription>Registre uma nova venda e crie as sessões automaticamente</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleCreateSale} className="space-y-4">
+              <div>
+                <Label htmlFor="saleDate">Data da Venda</Label>
+                <Input
+                  id="saleDate"
+                  type="date"
+                  value={saleDate}
+                  onChange={(e) => setSaleDate(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="patient">Paciente</Label>
+                <div className="flex gap-2">
+                  <Select value={selectedPatient} onValueChange={setSelectedPatient}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {patients.map(patient => (
+                        <SelectItem key={patient.id} value={patient.id}>
+                          {patient.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button type="button" variant="outline" size="icon">
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="procedure">Adicionar Procedimentos</Label>
+                <div className="relative" ref={procedureDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setIsProcedureDropdownOpen(!isProcedureDropdownOpen)}
+                    className="w-full px-4 py-2 text-left border border-gray-300 dark:border-gray-600 rounded-md hover:border-purple-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-colors"
+                  >
+                    {selectedProcedure ? (
+                      <span className="text-gray-900 dark:text-gray-100">
+                        {procedures.find(p => p.id === selectedProcedure)?.name || 'Selecione...'}
+                      </span>
+                    ) : (
+                      <span className="text-gray-500 dark:text-gray-400">Selecione um procedimento...</span>
+                    )}
+                  </button>
+
+                  {isProcedureDropdownOpen && (
+                    <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-60 overflow-auto">
+                      {/* Search Box */}
+                      <div className="p-2 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-900">
+                        <Input
+                          type="text"
+                          placeholder="Buscar procedimento..."
+                          value={procedureSearch}
+                          onChange={(e) => setProcedureSearch(e.target.value)}
+                          className="w-full"
+                          autoFocus
+                        />
+                      </div>
+
+                      {/* Procedures List */}
+                      {showNewProcedureForm ? (
+                        <div className="p-3 space-y-3 border-b border-gray-200 dark:border-gray-700">
+                          <div>
+                            <Label className="text-xs">Nome do Procedimento *</Label>
+                            <Input
+                              type="text"
+                              value={newProcedure.name}
+                              onChange={(e) => setNewProcedure({ ...newProcedure, name: e.target.value })}
+                              placeholder="Ex: Botox, Limpeza de Pele..."
+                              className="mt-1"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <Label className="text-xs">Preço (R$) *</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={newProcedure.price}
+                                onChange={(e) => setNewProcedure({ ...newProcedure, price: e.target.value })}
+                                placeholder="0,00"
+                                className="mt-1"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs">Duração (min)</Label>
+                              <Input
+                                type="number"
+                                value={newProcedure.duration}
+                                onChange={(e) => setNewProcedure({ ...newProcedure, duration: e.target.value })}
+                                placeholder="60"
+                                className="mt-1"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              onClick={handleCreateNewProcedure}
+                              size="sm"
+                              className="flex-1 bg-purple-600 hover:bg-purple-700"
+                            >
+                              Salvar
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={() => {
+                                setShowNewProcedureForm(false);
+                                setNewProcedure({ name: '', price: '', duration: '' });
+                              }}
+                              size="sm"
+                              variant="outline"
+                              className="flex-1"
+                            >
+                              Cancelar
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="max-h-48 overflow-auto">
+                            {procedures
+                              .filter((proc) =>
+                                proc.name.toLowerCase().includes(procedureSearch.toLowerCase())
+                              )
+                              .map((proc) => (
+                                <button
+                                  key={proc.id}
+                                  type="button"
+                                  onClick={() => handleSelectProcedure(proc.id)}
+                                  className="w-full px-4 py-2 text-left hover:bg-purple-50 transition-colors flex items-center justify-between"
+                                >
+                                  <span className="text-sm text-gray-700 dark:text-gray-300">{proc.name}</span>
+                                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                                    {formatCurrency(proc.price)}
+                                  </span>
+                                </button>
+                              ))}
+                          </div>
+                          <div className="border-t border-gray-200 dark:border-gray-700">
+                            <button
+                              type="button"
+                              onClick={() => setShowNewProcedureForm(true)}
+                              className="w-full px-4 py-2 text-sm text-purple-600 hover:bg-purple-50 transition-colors flex items-center gap-2"
+                            >
+                              <Plus className="h-4 w-4" />
+                              Cadastrar Novo Procedimento
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="quantity">Quantidade de Sessões</Label>
+                <Input
+                  id="quantity"
+                  type="number"
+                  min="1"
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div>
+                <Label>Valor Total Cobrado</Label>
+                <div className="text-2xl font-bold text-purple-600">
+                  {selectedProcedure
+                    ? formatCurrency((procedures.find(p => p.id === selectedProcedure)?.price || 0) * parseInt(quantity || '1'))
+                    : formatCurrency(0)}
+                </div>
+              </div>
+
+              {/* Payment Splits Section */}
+              <div className="space-y-4 border-t pt-4">
+                <div>
+                  <Label className="text-lg font-semibold text-purple-700">Split de Pagamentos</Label>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    Adicione as formas de pagamento. A soma deve ser igual ao total da venda.
+                  </p>
+                </div>
+
+                {/* Add Payment Split Form */}
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
+                  <Label className="text-sm font-semibold">Adicionar Forma de Pagamento</Label>
+                  
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={currentSplitMethod === 'CASH_PIX' ? 'default' : 'outline'}
+                      onClick={() => { setCurrentSplitMethod('CASH_PIX'); setCurrentSplitInstallments(1); }}
+                      className={currentSplitMethod === 'CASH_PIX' ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                    >
+                      Dinheiro / Pix
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={currentSplitMethod === 'CREDIT_CARD' ? 'default' : 'outline'}
+                      onClick={() => setCurrentSplitMethod('CREDIT_CARD')}
+                      className={currentSplitMethod === 'CREDIT_CARD' ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                    >
+                      Cartão Crédito
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={currentSplitMethod === 'DEBIT_CARD' ? 'default' : 'outline'}
+                      onClick={() => { setCurrentSplitMethod('DEBIT_CARD'); setCurrentSplitInstallments(1); }}
+                      className={currentSplitMethod === 'DEBIT_CARD' ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                    >
+                      Cartão Débito
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={currentSplitMethod === 'BANK_SLIP' ? 'default' : 'outline'}
+                      onClick={() => setCurrentSplitMethod('BANK_SLIP')}
+                      className={currentSplitMethod === 'BANK_SLIP' ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                    >
+                      Boleto
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label htmlFor="splitAmount" className="text-xs">Valor (R$)</Label>
+                      <Input
+                        id="splitAmount"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={currentSplitAmount}
+                        onChange={(e) => setCurrentSplitAmount(e.target.value)}
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="splitInstallments" className="text-xs">Parcelas</Label>
+                      <Select
+                        value={currentSplitInstallments.toString()}
+                        onValueChange={(value) => setCurrentSplitInstallments(parseInt(value))}
+                        disabled={currentSplitMethod === 'CASH_PIX' || currentSplitMethod === 'DEBIT_CARD'}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(num => (
+                            <SelectItem key={num} value={num.toString()}>
+                              {num === 1 ? 'À vista' : `${num}x`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleAddPaymentSplit}
+                    className="w-full bg-purple-600 hover:bg-purple-700"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Adicionar
+                  </Button>
+                </div>
+
+                {/* Payment Splits List */}
+                {paymentSplits.length > 0 && (
+                  <div className="space-y-3">
+                    <Label className="text-sm font-semibold">Formas de Pagamento Adicionadas</Label>
+                    {paymentSplits.map((split, splitIndex) => (
+                      <div key={splitIndex} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <p className="font-medium text-sm">{formatPaymentMethod(split.paymentMethod)}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              {formatCurrency(split.amount)} - {split.installments}x de {formatCurrency(split.amount / split.installments)}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleRemovePaymentSplit(splitIndex)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        
+                        {/* Installment dates */}
+                        {split.installments > 1 && (
+                          <div className="space-y-2 pl-4 border-l-2 border-purple-200">
+                            <Label className="text-xs text-gray-600 dark:text-gray-400">Datas de Recebimento</Label>
+                            {split.installmentDetails.map((installment, instIndex) => (
+                              <div key={instIndex} className="flex items-center gap-2">
+                                <span className="text-xs text-gray-500 dark:text-gray-400 w-16">
+                                  {instIndex + 1}ª parcela:
+                                </span>
+                                <Input
+                                  type="date"
+                                  value={installment.dueDate}
+                                  onChange={(e) => handleUpdateInstallmentDate(splitIndex, instIndex, e.target.value)}
+                                  className="text-xs h-8"
+                                />
+                                <span className="text-xs text-gray-600 dark:text-gray-400">
+                                  {formatCurrency(installment.amount)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    
+                    {/* Summary */}
+                    <div className="bg-purple-100 border border-purple-300 rounded-lg p-3">
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="font-medium">Total Pago:</span>
+                        <span className="font-bold text-purple-700">
+                          {formatCurrency(paymentSplits.reduce((sum, split) => sum + split.amount, 0))}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm mt-1">
+                        <span className="font-medium">Falta Pagar:</span>
+                        <span className={`font-bold ${
+                          (selectedProcedure ? (procedures.find(p => p.id === selectedProcedure)?.price || 0) * parseInt(quantity || '1') : 0) - paymentSplits.reduce((sum, split) => sum + split.amount, 0) === 0
+                            ? 'text-green-600'
+                            : 'text-orange-600'
+                        }`}>
+                          {formatCurrency(
+                            (selectedProcedure ? (procedures.find(p => p.id === selectedProcedure)?.price || 0) * parseInt(quantity || '1') : 0) - 
+                            paymentSplits.reduce((sum, split) => sum + split.amount, 0)
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <Button type="submit" className="w-full bg-purple-600 hover:bg-purple-700">
+                Registrar Venda
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        {/* Right Column - Sales History */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Histórico de Vendas</CardTitle>
+            <CardDescription>Clique no nome do paciente para ver detalhes das sessões</CardDescription>
+            <div className="mt-2">
+              <Input
+                placeholder="Buscar paciente..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4 max-h-[600px] overflow-y-auto">
+              {filteredSales.length === 0 ? (
+                <p className="text-gray-500 dark:text-gray-400 text-center py-8">Nenhuma venda encontrada</p>
+              ) : (
+                filteredSales.map(sale => {
+                  const pendingCount = sale._count.sessions - sale.completedSessions;
+                  return (
+                    <div 
+                      key={sale.id} 
+                      className="border rounded-lg p-4 hover:border-purple-300 hover:bg-purple-50/50 transition-colors cursor-pointer"
+                      onClick={() => openSaleDetails(sale)}
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h3 className="font-semibold text-lg text-purple-700 hover:text-purple-900">
+                            {sale.patient.name}
+                          </h3>
+                          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 mt-1">
+                            <Calendar className="h-4 w-4" />
+                            {new Date(sale.saleDate).toLocaleDateString('pt-BR')}
+                            <span className="text-gray-400">•</span>
+                            <CreditCard className="h-4 w-4" />
+                            {sale.paymentSplits && sale.paymentSplits.length > 0 
+                              ? `${sale.paymentSplits.length} forma${sale.paymentSplits.length > 1 ? 's' : ''} de pagamento`
+                              : sale.paymentMethod ? paymentMethodLabels[sale.paymentMethod] : 'Não informado'
+                            }
+                            {sale.installments && sale.installments > 1 && ` (${sale.installments}x)`}
+                          </div>
+                          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                            {sale.items.map(item => `${item.quantity}x ${item.procedure.name}`).join(', ')}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold text-purple-600 text-lg">{formatCurrency(sale.totalAmount)}</p>
+                          <span className={`text-xs px-2 py-1 rounded-full ${paymentStatusLabels[sale.paymentStatus]?.color || 'bg-gray-100 dark:bg-gray-800'}`}>
+                            {paymentStatusLabels[sale.paymentStatus]?.label || sale.paymentStatus}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-3">
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-gray-600 dark:text-gray-400">Progresso do Tratamento</span>
+                          <span className="font-medium">
+                            <span className="text-green-600">{sale.completedSessions} realizadas</span>
+                            {pendingCount > 0 && (
+                              <span className="text-orange-500"> • {pendingCount} pendentes</span>
+                            )}
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                          <div
+                            className="bg-green-500 h-2.5 rounded-full transition-all"
+                            style={{
+                              width: `${sale._count.sessions > 0 ? (sale.completedSessions / sale._count.sessions) * 100 : 0}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Sale Details Modal */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              <span>Detalhes da Venda</span>
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedSale && (
+            <div className="space-y-6">
+              {/* Patient Info */}
+              <div className="bg-purple-50 rounded-lg p-4">
+                <h3 className="font-semibold text-lg text-purple-800 mb-3 flex items-center gap-2">
+                  <User className="h-5 w-5" />
+                  Dados do Paciente
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Nome</p>
+                    <p className="font-medium">{selectedSale.patient.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Telefone/WhatsApp</p>
+                    <p className="font-medium flex items-center gap-1">
+                      <Phone className="h-4 w-4 text-gray-400" />
+                      {selectedSale.patient.phone}
+                    </p>
+                  </div>
+                  {selectedSale.patient.email && (
+                    <div className="col-span-2">
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Email</p>
+                      <p className="font-medium flex items-center gap-1">
+                        <Mail className="h-4 w-4 text-gray-400" />
+                        {selectedSale.patient.email}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Sale Info */}
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                  <ShoppingCart className="h-5 w-5" />
+                  Informações da Venda
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Data da Venda</p>
+                    <p className="font-medium">{new Date(selectedSale.saleDate).toLocaleDateString('pt-BR')}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Valor Total</p>
+                    <p className="font-bold text-purple-600 text-xl">{formatCurrency(selectedSale.totalAmount)}</p>
+                  </div>
+                  
+                  {/* Payment Splits Display */}
+                  {selectedSale.paymentSplits && selectedSale.paymentSplits.length > 0 ? (
+                    <div className="col-span-2">
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Formas de Pagamento</p>
+                      <div className="space-y-2">
+                        {selectedSale.paymentSplits.map((split, index) => (
+                          <div key={index} className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <p className="font-medium">{formatPaymentMethod(split.paymentMethod)}</p>
+                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                  {split.installments === 1 
+                                    ? 'À vista' 
+                                    : `${split.installments}x de ${formatCurrency(split.amount / split.installments)}`
+                                  }
+                                </p>
+                              </div>
+                              <p className="font-bold text-purple-600">{formatCurrency(split.amount)}</p>
+                            </div>
+                            {split.installmentDetails && split.installmentDetails.length > 1 && (
+                              <div className="mt-2 pt-2 border-t border-purple-200">
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Datas de Recebimento:</p>
+                                <div className="space-y-1">
+                                  {split.installmentDetails.map((inst) => (
+                                    <div key={inst.installmentNumber} className="flex justify-between text-xs">
+                                      <span>{inst.installmentNumber}ª parcela - {new Date(inst.dueDate).toLocaleDateString('pt-BR')}</span>
+                                      <span className="font-medium">{formatCurrency(inst.amount)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Forma de Pagamento</p>
+                        <p className="font-medium">
+                          {selectedSale.paymentMethod ? paymentMethodLabels[selectedSale.paymentMethod] : 'Não informado'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Parcelamento</p>
+                        <p className="font-medium">
+                          {selectedSale.installments && selectedSale.installments === 1 
+                            ? 'À vista' 
+                            : selectedSale.installments 
+                              ? `${selectedSale.installments}x de ${formatCurrency(selectedSale.totalAmount / selectedSale.installments)}`
+                              : 'Não informado'}
+                        </p>
+                      </div>
+                    </>
+                  )}
+                  <div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Status do Pagamento</p>
+                    <span className={`text-sm px-2 py-1 rounded-full ${paymentStatusLabels[selectedSale.paymentStatus]?.color || 'bg-gray-100 dark:bg-gray-800'}`}>
+                      {paymentStatusLabels[selectedSale.paymentStatus]?.label || selectedSale.paymentStatus}
+                    </span>
+                  </div>
+                </div>
+                {selectedSale.notes && (
+                  <div className="mt-4">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Observações</p>
+                    <p className="text-gray-700 dark:text-gray-300">{selectedSale.notes}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Sessions */}
+              <div>
+                <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Sessões Adquiridas
+                </h3>
+                
+                {/* Summary */}
+                <div className="bg-white dark:bg-gray-900 border rounded-lg p-4 mb-4">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-gray-600 dark:text-gray-400">Total de sessões:</span>
+                    <span className="font-bold">{selectedSale.sessions?.length || 0}</span>
+                  </div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-gray-600 dark:text-gray-400">Sessões realizadas:</span>
+                    <span className="font-bold text-green-600">
+                      {selectedSale.sessions?.filter(s => s.status === 'COMPLETED').length || 0}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 dark:text-gray-400">Sessões pendentes:</span>
+                    <span className="font-bold text-orange-500">
+                      {selectedSale.sessions?.filter(s => s.status === 'PENDING').length || 0}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Sessions List */}
+                <div className="space-y-2">
+                  {selectedSale.sessions?.map((session, index) => (
+                    <div 
+                      key={session.id}
+                      className={`flex items-center justify-between p-3 rounded-lg border ${
+                        session.status === 'COMPLETED' 
+                          ? 'bg-green-50 border-green-200' 
+                          : 'bg-orange-50 border-orange-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold ${
+                          session.status === 'COMPLETED' 
+                            ? 'bg-green-200 text-green-800' 
+                            : 'bg-orange-200 text-orange-800'
+                        }`}>
+                          {index + 1}
+                        </div>
+                        <div>
+                          <p className="font-medium">{session.procedure.name}</p>
+                          {session.status === 'COMPLETED' && session.completedDate && (
+                            <p className="text-sm text-green-600">
+                              Realizada em {new Date(session.completedDate).toLocaleDateString('pt-BR')}
+                            </p>
+                          )}
+                          {session.status === 'PENDING' && (
+                            <p className="text-sm text-orange-600">Aguardando execução</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {session.status === 'COMPLETED' ? (
+                          <CheckCircle2 className="h-6 w-6 text-green-600" />
+                        ) : (
+                          <Button
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCompleteSession(session.id);
+                            }}
+                            className="bg-green-600 hover:bg-green-700"
+                          >
+                            Concluir
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

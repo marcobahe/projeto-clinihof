@@ -1,0 +1,669 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { useSession } from 'next-auth/react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { toast } from 'sonner';
+import { Plus, Edit2, Trash2, Package, AlertTriangle, Search, DollarSign, Box, ChevronDown, PlusCircle, X } from 'lucide-react';
+
+interface Supply {
+  id: string;
+  name: string;
+  unit: string;
+  costPerUnit: number;
+  stockQty: number;
+  minStock: number;
+}
+
+interface Stats {
+  totalSupplies: number;
+  totalInventoryValue: number;
+  lowStockItems: number;
+  outOfStockItems: number;
+}
+
+export default function SuppliesPage() {
+  const { data: session, status } = useSession() || {};
+  const [supplies, setSupplies] = useState<Supply[]>([]);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Dropdown state
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [dropdownSearch, setDropdownSearch] = useState('');
+  const [showNewSupplyForm, setShowNewSupplyForm] = useState(false);
+  const [newSupplyName, setNewSupplyName] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Form state
+  const [formData, setFormData] = useState({
+    name: '',
+    unit: 'ml',
+    costPerUnit: '',
+    stockQty: '',
+    minStock: '',
+  });
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (status === 'authenticated') {
+      fetchSupplies();
+      fetchStats();
+    }
+  }, [status]);
+
+  const fetchSupplies = async () => {
+    try {
+      const response = await fetch('/api/supplies');
+      if (response.ok) {
+        const data = await response.json();
+        setSupplies(data);
+      }
+    } catch (error) {
+      toast.error('Erro ao carregar insumos');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchStats = async () => {
+    try {
+      const response = await fetch('/api/supplies/stats');
+      if (response.ok) {
+        const data = await response.json();
+        setStats(data);
+      }
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!formData.name || !formData.costPerUnit || !formData.stockQty || !formData.minStock) {
+      toast.error('Preencha todos os campos obrigatórios');
+      return;
+    }
+
+    try {
+      const payload = {
+        name: formData.name,
+        unit: formData.unit,
+        costPerUnit: parseFloat(formData.costPerUnit),
+        stockQty: parseFloat(formData.stockQty),
+        minStock: parseFloat(formData.minStock),
+      };
+
+      const url = editingId ? `/api/supplies/${editingId}` : '/api/supplies';
+      const method = editingId ? 'PATCH' : 'POST';
+
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        toast.success(editingId ? 'Insumo atualizado!' : 'Insumo cadastrado!');
+        resetForm();
+        fetchSupplies();
+        fetchStats();
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.error || 'Erro ao salvar insumo');
+      }
+    } catch (error) {
+      toast.error('Erro ao salvar insumo');
+    }
+  };
+
+  const handleEdit = (supply: Supply) => {
+    setEditingId(supply.id);
+    setFormData({
+      name: supply.name,
+      unit: supply.unit,
+      costPerUnit: supply.costPerUnit.toString(),
+      stockQty: supply.stockQty.toString(),
+      minStock: supply.minStock.toString(),
+    });
+    // Scroll to form
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Deseja realmente excluir este insumo?')) return;
+
+    try {
+      const response = await fetch(`/api/supplies/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        toast.success('Insumo excluído!');
+        fetchSupplies();
+        fetchStats();
+      } else {
+        toast.error('Erro ao excluir insumo');
+      }
+    } catch (error) {
+      toast.error('Erro ao excluir insumo');
+    }
+  };
+
+  const resetForm = () => {
+    setEditingId(null);
+    setFormData({
+      name: '',
+      unit: 'ml',
+      costPerUnit: '',
+      stockQty: '',
+      minStock: '',
+    });
+    setShowNewSupplyForm(false);
+    setNewSupplyName('');
+    setDropdownSearch('');
+  };
+
+  // Select existing supply from dropdown
+  const handleSelectSupply = (supply: Supply) => {
+    setEditingId(supply.id);
+    setFormData({
+      name: supply.name,
+      unit: supply.unit,
+      costPerUnit: supply.costPerUnit.toString(),
+      stockQty: supply.stockQty.toString(),
+      minStock: supply.minStock.toString(),
+    });
+    setIsDropdownOpen(false);
+    setDropdownSearch('');
+    setShowNewSupplyForm(false);
+  };
+
+  // Start creating new supply
+  const handleStartNewSupply = () => {
+    setShowNewSupplyForm(true);
+    setIsDropdownOpen(false);
+    setEditingId(null);
+    setFormData({
+      name: dropdownSearch || '',
+      unit: 'ml',
+      costPerUnit: '',
+      stockQty: '',
+      minStock: '',
+    });
+    setNewSupplyName(dropdownSearch || '');
+    setDropdownSearch('');
+  };
+
+  // Get unique supply names for dropdown (without duplicates)
+  const uniqueSupplyNames = [...new Set(supplies.map(s => s.name))];
+  
+  // Filter supplies for dropdown
+  const filteredDropdownSupplies = supplies.filter(supply =>
+    supply.name.toLowerCase().includes(dropdownSearch.toLowerCase())
+  );
+
+  const filteredSupplies = supplies.filter((supply) =>
+    supply.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  if (status === 'loading' || loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-8 space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Insumos</h1>
+        <p className="text-gray-500 dark:text-gray-400 mt-1">Controle de estoque e custos de insumos</p>
+      </div>
+
+      {/* Statistics Cards */}
+      {stats && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Total de Insumos</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.totalSupplies}</p>
+                </div>
+                <div className="h-12 w-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <Package className="h-6 w-6 text-purple-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Valor em Estoque</p>
+                  <p className="text-2xl font-bold text-purple-600">
+                    R$ {stats.totalInventoryValue.toFixed(2)}
+                  </p>
+                </div>
+                <div className="h-12 w-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <DollarSign className="h-6 w-6 text-purple-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Estoque Baixo</p>
+                  <p className="text-2xl font-bold text-orange-600">{stats.lowStockItems}</p>
+                </div>
+                <div className="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                  <AlertTriangle className="h-6 w-6 text-orange-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Sem Estoque</p>
+                  <p className="text-2xl font-bold text-red-600">{stats.outOfStockItems}</p>
+                </div>
+                <div className="h-12 w-12 bg-red-100 rounded-lg flex items-center justify-center">
+                  <Box className="h-6 w-6 text-red-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Two Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left Column - Form */}
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Package className="h-5 w-5 text-purple-600" />
+                {editingId ? 'Editar Insumo' : 'Novo Insumo'}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Dropdown de Seleção de Insumo */}
+                <div className="relative" ref={dropdownRef}>
+                  <Label>Selecionar Insumo *</Label>
+                  
+                  {/* Selected Supply Display or Dropdown Trigger */}
+                  {formData.name && !isDropdownOpen ? (
+                    <div className="flex items-center justify-between p-3 border border-purple-300 bg-purple-50 rounded-md">
+                      <div className="flex items-center gap-2">
+                        <Package className="h-4 w-4 text-purple-600" />
+                        <span className="font-medium text-purple-900">{formData.name}</span>
+                        {editingId && (
+                          <span className="text-xs bg-purple-200 text-purple-700 px-2 py-0.5 rounded">
+                            Editando
+                          </span>
+                        )}
+                        {showNewSupplyForm && (
+                          <span className="text-xs bg-green-200 text-green-700 px-2 py-0.5 rounded">
+                            Novo
+                          </span>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          resetForm();
+                          setIsDropdownOpen(true);
+                        }}
+                        className="h-6 w-6 p-0 hover:bg-purple-200"
+                      >
+                        <X className="h-4 w-4 text-purple-600" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Dropdown Trigger */}
+                      <div
+                        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                        className="flex items-center justify-between p-3 border border-gray-300 dark:border-gray-600 rounded-md cursor-pointer hover:border-purple-400 transition-colors"
+                      >
+                        <span className="text-gray-500 dark:text-gray-400">Selecione um insumo existente ou cadastre novo</span>
+                        <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                      </div>
+
+                      {/* Dropdown Panel */}
+                      {isDropdownOpen && (
+                        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
+                          {/* Search Input */}
+                          <div className="p-2 border-b">
+                            <div className="relative">
+                              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                              <Input
+                                placeholder="Buscar insumo..."
+                                value={dropdownSearch}
+                                onChange={(e) => setDropdownSearch(e.target.value)}
+                                className="pl-9"
+                                autoFocus
+                              />
+                            </div>
+                          </div>
+
+                          {/* Supply List */}
+                          <div className="max-h-48 overflow-y-auto">
+                            {filteredDropdownSupplies.length > 0 ? (
+                              filteredDropdownSupplies.map((supply) => (
+                                <div
+                                  key={supply.id}
+                                  onClick={() => handleSelectSupply(supply)}
+                                  className="flex items-center justify-between px-4 py-3 hover:bg-purple-50 cursor-pointer border-b last:border-b-0"
+                                >
+                                  <div>
+                                    <p className="font-medium text-gray-900 dark:text-gray-100">{supply.name}</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                      {supply.unit} • R$ {supply.costPerUnit.toFixed(2)} • Estoque: {supply.stockQty}
+                                    </p>
+                                  </div>
+                                  <Edit2 className="h-4 w-4 text-gray-400" />
+                                </div>
+                              ))
+                            ) : (
+                              <div className="px-4 py-6 text-center text-gray-500 dark:text-gray-400">
+                                <Package className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                                <p className="text-sm">Nenhum insumo encontrado</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Add New Option */}
+                          <div className="border-t p-2">
+                            <button
+                              type="button"
+                              onClick={handleStartNewSupply}
+                              className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-green-50 rounded-md transition-colors group"
+                            >
+                              <div className="h-8 w-8 bg-green-100 rounded-full flex items-center justify-center group-hover:bg-green-200">
+                                <PlusCircle className="h-5 w-5 text-green-600" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-green-700">Cadastrar Novo Insumo</p>
+                                {dropdownSearch && (
+                                  <p className="text-xs text-green-600">Criar "{dropdownSearch}"</p>
+                                )}
+                              </div>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Rest of the form - only show when an item is selected or creating new */}
+                {(formData.name || showNewSupplyForm) && (
+                  <>
+                    {/* New Supply Name Input - only for new supplies */}
+                    {showNewSupplyForm && (
+                      <div>
+                        <Label htmlFor="newName">Nome do Novo Insumo *</Label>
+                        <Input
+                          id="newName"
+                          value={formData.name}
+                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                          placeholder="Digite o nome do novo insumo"
+                          autoFocus
+                        />
+                      </div>
+                    )}
+
+                    <div>
+                      <Label htmlFor="unit">Unidade de Medida</Label>
+                      <select
+                        id="unit"
+                        value={formData.unit}
+                        onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      >
+                        <option value="ml">ml (mililitro)</option>
+                        <option value="g">g (grama)</option>
+                        <option value="unidade">unidade</option>
+                        <option value="frasco">frasco</option>
+                        <option value="caixa">caixa</option>
+                        <option value="seringa">seringa</option>
+                        <option value="aplicação">aplicação</option>
+                        <option value="Par">par</option>
+                        <option value="Pacote">pacote</option>
+                        <option value="Frasco">Frasco</option>
+                        <option value="Seringa">Seringa</option>
+                        <option value="Aplicação">Aplicação</option>
+                        <option value="Unidade">Unidade</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="costPerUnit">Custo por Unidade (R$) *</Label>
+                      <Input
+                        id="costPerUnit"
+                        type="number"
+                        step="0.01"
+                        value={formData.costPerUnit}
+                        onChange={(e) => setFormData({ ...formData, costPerUnit: e.target.value })}
+                        placeholder="0.00"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="stockQty">Quantidade em Estoque *</Label>
+                      <Input
+                        id="stockQty"
+                        type="number"
+                        step="0.01"
+                        value={formData.stockQty}
+                        onChange={(e) => setFormData({ ...formData, stockQty: e.target.value })}
+                        placeholder="0"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="minStock">Estoque Mínimo *</Label>
+                      <Input
+                        id="minStock"
+                        type="number"
+                        step="0.01"
+                        value={formData.minStock}
+                        onChange={(e) => setFormData({ ...formData, minStock: e.target.value })}
+                        placeholder="0"
+                      />
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Você será alertado quando o estoque atingir este nível
+                      </p>
+                    </div>
+
+                    <div className="flex gap-2 pt-2">
+                      <Button type="submit" className="flex-1 bg-purple-600 hover:bg-purple-700">
+                        <Plus className="h-4 w-4 mr-2" />
+                        {editingId ? 'Atualizar Estoque' : 'Cadastrar Insumo'}
+                      </Button>
+                      <Button type="button" variant="outline" onClick={resetForm}>
+                        Cancelar
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Column - Supply List */}
+        <div className="space-y-6">
+          <Card className="h-fit">
+            <CardHeader>
+              <div className="flex items-center justify-between gap-4">
+                <CardTitle>Estoque de Insumos</CardTitle>
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Buscar insumo..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {filteredSupplies.length === 0 ? (
+                <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                  <Package className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                  <p className="font-medium">Nenhum insumo encontrado</p>
+                  <p className="text-sm">Cadastre seu primeiro insumo usando o formulário ao lado</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-[calc(100vh-300px)] overflow-y-auto pr-2">
+                  {filteredSupplies.map((supply) => {
+                    const isLowStock = supply.stockQty <= supply.minStock;
+                    const isOutOfStock = supply.stockQty === 0;
+                    const totalValue = supply.costPerUnit * supply.stockQty;
+
+                    return (
+                      <div
+                        key={supply.id}
+                        className={`p-4 border rounded-lg hover:shadow-md transition-shadow ${
+                          isOutOfStock
+                            ? 'border-red-300 bg-red-50'
+                            : isLowStock
+                            ? 'border-orange-300 bg-orange-50'
+                            : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-semibold text-lg text-gray-900 dark:text-gray-100">{supply.name}</h3>
+                              {(isLowStock || isOutOfStock) && (
+                                <AlertTriangle
+                                  className={`h-4 w-4 ${
+                                    isOutOfStock ? 'text-red-600' : 'text-orange-600'
+                                  }`}
+                                />
+                              )}
+                            </div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{supply.unit}</p>
+                          </div>
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleEdit(supply)}
+                              className="h-8 w-8 p-0 hover:bg-purple-100"
+                            >
+                              <Edit2 className="h-3.5 w-3.5 text-purple-600" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleDelete(supply.id)}
+                              className="h-8 w-8 p-0 hover:bg-red-100"
+                            >
+                              <Trash2 className="h-3.5 w-3.5 text-red-600" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                          <div>
+                            <span className="text-gray-600 dark:text-gray-400">Custo unitário:</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-medium">R$ {supply.costPerUnit.toFixed(2)}</span>
+                          </div>
+
+                          <div>
+                            <span className="text-gray-600 dark:text-gray-400">Em estoque:</span>
+                          </div>
+                          <div className="text-right">
+                            <span
+                              className={`font-semibold ${
+                                isOutOfStock
+                                  ? 'text-red-600'
+                                  : isLowStock
+                                  ? 'text-orange-600'
+                                  : 'text-green-600'
+                              }`}
+                            >
+                              {supply.stockQty} {supply.unit}
+                            </span>
+                          </div>
+
+                          <div>
+                            <span className="text-gray-600 dark:text-gray-400">Estoque mínimo:</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-medium">{supply.minStock} {supply.unit}</span>
+                          </div>
+
+                          <div>
+                            <span className="text-gray-600 dark:text-gray-400">Valor total:</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-semibold text-purple-600">
+                              R$ {totalValue.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {isOutOfStock && (
+                          <div className="mt-3 pt-3 border-t border-red-200">
+                            <p className="text-xs text-red-700 font-medium">
+                              ⚠️ Insumo sem estoque - Reabasteça imediatamente
+                            </p>
+                          </div>
+                        )}
+
+                        {isLowStock && !isOutOfStock && (
+                          <div className="mt-3 pt-3 border-t border-orange-200">
+                            <p className="text-xs text-orange-700 font-medium">
+                              ⚠️ Estoque abaixo do mínimo - Considere reabastecer
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
