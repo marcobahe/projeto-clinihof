@@ -994,8 +994,10 @@ export default function CashFlowPage() {
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Margem de Lucro</p>
                   <p className="text-xl font-bold text-purple-700">
                     {
-                      formatNumber((data.summary.netCashFlow / data.summary.totalReceivables) * 100, 1)
-                    }%
+                      data.summary.totalReceivables === 0
+                        ? 'N/A'
+                        : `${formatNumber((data.summary.netCashFlow / data.summary.totalReceivables) * 100, 1)}%`
+                    }
                   </p>
                 </div>
               </div>
