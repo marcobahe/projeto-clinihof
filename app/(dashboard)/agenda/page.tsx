@@ -27,6 +27,7 @@ interface Appointment {
   procedure: {
     id: string;
     name: string;
+    color?: string | null;
   };
   sale: {
     id: string;
@@ -37,6 +38,17 @@ interface Appointment {
     };
   };
 }
+
+// Helper function to get procedure color style
+const getProcedureColorStyle = (color?: string | null) => {
+  if (!color) return {};
+  return {
+    borderLeftColor: color,
+    borderLeftWidth: '4px',
+    borderLeftStyle: 'solid' as const,
+    backgroundColor: `${color}15`, // Very light background
+  };
+};
 
 interface PatientStats {
   patientId: string;
@@ -334,7 +346,8 @@ export default function AgendaPage() {
                         e.stopPropagation();
                         handleEditAppointment(apt);
                       }}
-                      className={`text-xs p-1 rounded truncate ${statusColors[apt.status]} ${apt.appointmentType ? appointmentTypeColors[apt.appointmentType] : ''} cursor-pointer hover:opacity-80`}
+                      style={getProcedureColorStyle(apt.procedure.color)}
+                      className={`text-xs p-1 rounded truncate ${!apt.procedure.color ? statusColors[apt.status] : ''} ${!apt.procedure.color && apt.appointmentType ? appointmentTypeColors[apt.appointmentType] : ''} cursor-pointer hover:opacity-80`}
                     >
                       {apt.scheduledDate && format(parseISO(apt.scheduledDate), 'HH:mm')} - {apt.sale.patient.name}
                     </div>

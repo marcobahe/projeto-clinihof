@@ -59,7 +59,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     }
 
     const body = await req.json();
-    const { name, email, phone, notes } = body;
+    const { name, email, phone, birthday, origin, notes } = body;
 
     if (!name || !phone) {
       return NextResponse.json(
@@ -77,6 +77,8 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         name,
         email: email || null,
         phone,
+        birthday: birthday ? new Date(birthday) : null,
+        origin: origin || null,
         notes: notes || null,
       },
     });

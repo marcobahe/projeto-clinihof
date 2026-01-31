@@ -1,7 +1,6 @@
 generator client {
     provider = "prisma-client-js"
     binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
-    output = "/home/ubuntu/cliniprice/nextjs_space/node_modules/.prisma/client"
 }
 
 datasource db {
@@ -37,6 +36,14 @@ model Session {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+// User roles for access control
+enum UserRole {
+  ADMIN         // Full access to everything
+  MANAGER       // Access to reports, sales, appointments, patients (no system settings)
+  USER          // Access to appointments, patients, own sales
+  RECEPTIONIST  // Access to appointments, patients (read-only on financial data)
+}
+
 model User {
   id            String    @id @default(cuid())
   name          String?
@@ -45,6 +52,7 @@ model User {
   image         String?
   password      String
   fullName      String
+  role          UserRole  @default(USER)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   
@@ -141,6 +149,7 @@ model Collaborator {
   workspace        Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   procedures       ProcedureCollaborator[]
   quotes           Quote[]                 // Orçamentos criados por este profissional
+  sales            Sale[]                  // Vendas realizadas por este colaborador
   
   @@index([workspaceId])
 }
@@ -175,16 +184,29 @@ model ProcedureCollaborator {
   @@index([collaboratorId])
 }
 
+// Patient origin - Como o paciente conheceu a clínica
+enum PatientOrigin {
+  INSTAGRAM
+  INDICACAO
+  GOOGLE
+  WHATSAPP
+  FACEBOOK
+  SITE
+  OUTROS
+}
+
 // Patient model
 model Patient {
-  id          String   @id @default(cuid())
+  id          String         @id @default(cuid())
   workspaceId String
   name        String
   email       String?
-  phone       String   // WhatsApp/Phone (required)
-  notes       String?  @db.Text
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  phone       String         // WhatsApp/Phone (required)
+  birthday    DateTime?      // Data de aniversário
+  origin      PatientOrigin? // Como conheceu a clínica
+  notes       String?        @db.Text
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
   
   workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   sales        Sale[]
@@ -192,6 +214,7 @@ model Patient {
   
   @@unique([workspaceId, name, phone]) // Evita duplicação de pacientes com mesmo nome + telefone
   @@index([workspaceId])
+  @@index([birthday])
 }
 
 // Procedure model - Procedimentos estéticos com custo detalhado
@@ -201,6 +224,7 @@ model Procedure {
   name        String
   price       Float    // Preço de venda em R$
   duration    Int      // Duração média em minutos
+  color       String?  // Cor para exibição no calendário (hex code)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -220,6 +244,7 @@ model Sale {
   id               String        @id @default(cuid())
   workspaceId      String
   patientId        String
+  sellerId         String?       // Vendedor/Colaborador responsável pela venda
   saleDate         DateTime      @default(now()) // Data da venda
   totalAmount      Float         // Valor total cobrado
   paymentMethod    PaymentMethod? // Forma de pagamento (deprecated - usar PaymentSplit)
@@ -231,12 +256,14 @@ model Sale {
   
   workspace        Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   patient          Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  seller           Collaborator?      @relation(fields: [sellerId], references: [id])
   items            SaleItem[]         // Procedimentos incluídos na venda
   sessions         ProcedureSession[] // Sessões de execução
   paymentSplits    PaymentSplit[]     // Split de pagamentos (nova feature)
   
   @@index([workspaceId])
   @@index([patientId])
+  @@index([sellerId])
   @@index([saleDate])
 }
 

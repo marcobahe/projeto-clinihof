@@ -29,6 +29,14 @@ export async function GET(request: NextRequest) {
             phone: true,
           },
         },
+        seller: {
+          select: {
+            id: true,
+            name: true,
+            commissionType: true,
+            commissionValue: true,
+          },
+        },
         items: {
           include: {
             procedure: true,
@@ -93,6 +101,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       patientId,
+      sellerId, // Vendedor/Colaborador responsável
       saleDate,
       totalAmount,
       paymentMethod, // deprecated - mantido para compatibilidade
@@ -149,6 +158,7 @@ export async function POST(request: NextRequest) {
       data: {
         workspaceId: workspace.id,
         patientId,
+        sellerId: sellerId || null, // Vendedor/Colaborador responsável
         saleDate: saleDate ? new Date(saleDate) : new Date(),
         totalAmount: parseFloat(totalAmount),
         paymentMethod: paymentMethod || null, // deprecated

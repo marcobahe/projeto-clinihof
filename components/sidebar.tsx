@@ -21,6 +21,8 @@ import {
   X,
   FileText,
   Settings,
+  Shield,
+  Percent,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -33,12 +35,14 @@ const navigation = [
   { name: 'Agenda', href: '/agenda', icon: CalendarDays },
   { name: 'Pacientes', href: '/patients', icon: Users },
   { name: 'Orçamentos', href: '/quotes', icon: FileText },
+  { name: 'Comissões', href: '/comissoes', icon: Percent },
   { name: 'Custos', href: '/costs', icon: DollarSign },
   { name: 'Fluxo de Caixa', href: '/cashflow', icon: TrendingUp },
   { name: 'Insumos', href: '/supplies', icon: Package },
   { name: 'Colaboradores', href: '/collaborators', icon: UsersRound },
   { name: 'Procedimentos', href: '/procedures', icon: Stethoscope },
   { name: 'Precificação (Pacotes)', href: '/packages', icon: Tag },
+  { name: 'Usuários', href: '/usuarios', icon: Shield },
   { name: 'Administração', href: '/admin', icon: Settings },
   { name: 'Minha Conta', href: '/account', icon: UserCircle },
 ];

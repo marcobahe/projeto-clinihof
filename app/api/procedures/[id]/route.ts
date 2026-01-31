@@ -83,7 +83,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     }
 
     const body = await req.json();
-    const { name, price, duration, supplies, collaborators } = body;
+    const { name, price, duration, color, supplies, collaborators } = body;
 
     if (!name || price === undefined) {
       return NextResponse.json(
@@ -109,6 +109,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
           name,
           price: parseFloat(price),
           duration: parseInt(duration) || 0,
+          color: color !== undefined ? (color || null) : undefined,
           supplies: supplies?.length > 0 ? {
             create: supplies.map((s: { supplyId: string; quantity: number }) => ({
               supplyId: s.supplyId,
@@ -172,7 +173,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     }
 
     const body = await req.json();
-    const { name, price, duration, supplies, collaborators } = body;
+    const { name, price, duration, color, supplies, collaborators } = body;
 
     // Update procedure and manage relations in a transaction
     const procedure = await prisma.$transaction(async (tx) => {
@@ -191,6 +192,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
           ...(name && { name }),
           ...(price !== undefined && { price: parseFloat(price) }),
           ...(duration !== undefined && { duration: parseInt(duration) || 0 }),
+          ...(color !== undefined && { color: color || null }),
           supplies: supplies?.length > 0 ? {
             create: supplies.map((s: { supplyId: string; quantity: number }) => ({
               supplyId: s.supplyId,

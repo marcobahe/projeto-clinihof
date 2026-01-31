@@ -5,14 +5,30 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Calendar, Globe } from 'lucide-react';
+import { format } from 'date-fns';
+
+type PatientOrigin = 'INSTAGRAM' | 'INDICACAO' | 'GOOGLE' | 'WHATSAPP' | 'FACEBOOK' | 'SITE' | 'OUTROS';
+
+const originOptions: { value: PatientOrigin; label: string }[] = [
+  { value: 'INSTAGRAM', label: 'Instagram' },
+  { value: 'INDICACAO', label: 'Indicação' },
+  { value: 'GOOGLE', label: 'Google' },
+  { value: 'WHATSAPP', label: 'WhatsApp' },
+  { value: 'FACEBOOK', label: 'Facebook' },
+  { value: 'SITE', label: 'Site' },
+  { value: 'OUTROS', label: 'Outros' },
+];
 
 interface Patient {
   id: string;
   name: string;
   email?: string | null;
   phone: string;
+  birthday?: string | null;
+  origin?: PatientOrigin | null;
   notes?: string | null;
 }
 
@@ -27,6 +43,8 @@ export function PatientForm({ patient, onSuccess }: PatientFormProps) {
     name: patient?.name ?? '',
     email: patient?.email ?? '',
     phone: patient?.phone ?? '',
+    birthday: patient?.birthday ? format(new Date(patient.birthday), 'yyyy-MM-dd') : '',
+    origin: patient?.origin ?? '',
     notes: patient?.notes ?? '',
   });
 
@@ -38,10 +56,16 @@ export function PatientForm({ patient, onSuccess }: PatientFormProps) {
       const url = patient ? `/api/patients/${patient.id}` : '/api/patients';
       const method = patient ? 'PUT' : 'POST';
 
+      const submitData = {
+        ...formData,
+        birthday: formData.birthday || null,
+        origin: formData.origin || null,
+      };
+
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(submitData),
       });
 
       if (!response.ok) {
@@ -102,6 +126,44 @@ export function PatientForm({ patient, onSuccess }: PatientFormProps) {
           required
           placeholder="(00) 00000-0000"
         />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <Label htmlFor="birthday" className="flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            Data de Nascimento
+          </Label>
+          <Input
+            id="birthday"
+            type="date"
+            value={formData.birthday}
+            onChange={(e) => setFormData({ ...formData, birthday: e.target.value })}
+            className="mt-1"
+          />
+        </div>
+
+        <div>
+          <Label htmlFor="origin" className="flex items-center gap-2">
+            <Globe className="h-4 w-4" />
+            Como nos conheceu?
+          </Label>
+          <Select
+            value={formData.origin}
+            onValueChange={(value) => setFormData({ ...formData, origin: value })}
+          >
+            <SelectTrigger className="mt-1">
+              <SelectValue placeholder="Selecione a origem" />
+            </SelectTrigger>
+            <SelectContent>
+              {originOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div>

@@ -47,6 +47,8 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
+import { OriginStatsWidget } from '@/components/dashboard/origin-stats-widget';
+import { BirthdayWidget } from '@/components/dashboard/birthday-widget';
 
 interface DashboardStats {
   financial: {
@@ -952,6 +954,12 @@ export default function DashboardPage() {
             )}
           </Card>
         </motion.div>
+      </div>
+
+      {/* Origin Stats and Birthday Widgets */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <OriginStatsWidget />
+        <BirthdayWidget />
       </div>
     </div>
   );
