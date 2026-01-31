@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import bcrypt from 'bcryptjs';
-import { createExampleData } from '@/lib/seed-data';
+import { seedWorkspaceData } from '@/lib/seed-workspace';
 
 export async function POST(req: NextRequest) {
   try {
@@ -50,12 +50,18 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      return { user, workspace };
+      // Update user to link to workspace
+      const updatedUser = await tx.user.update({
+        where: { id: user.id },
+        data: { workspaceId: workspace.id },
+      });
+
+      return { user: updatedUser, workspace };
     });
 
     // Create example data for the new workspace (outside transaction for better performance)
     try {
-      await createExampleData(prisma, result.workspace.id);
+      await seedWorkspaceData(result.workspace.id);
       console.log(`Example data created for workspace: ${result.workspace.id}`);
     } catch (exampleDataError) {
       // Log error but don't fail signup if example data creation fails

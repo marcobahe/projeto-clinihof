@@ -20,8 +20,20 @@ import {
   Crown,
   Shield,
   User,
-  UserCheck
+  UserCheck,
+  Key
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogDescription, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogTrigger,
+  DialogClose
+} from '@/components/ui/dialog';
+import { toast } from '@/hooks/use-toast';
 import { UserRole } from '@prisma/client';
 
 interface User {
@@ -57,6 +69,9 @@ export default function UsersPage() {
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [tempPassword, setTempPassword] = useState('');
+  const [resetingUserId, setResetingUserId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchUsers();
@@ -116,6 +131,45 @@ export default function UsersPage() {
       }
     } catch (error) {
       console.error('Error updating user role:', error);
+    }
+  };
+
+  const resetUserPassword = async (userId: string, userName: string) => {
+    try {
+      setResetingUserId(userId);
+      const response = await fetch(`/api/master/users/${userId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'reset-password' }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setTempPassword(data.tempPassword);
+        setResetDialogOpen(true);
+        toast({
+          title: 'Senha resetada',
+          description: `Senha temporária gerada para ${userName}`,
+        });
+      } else {
+        const errorData = await response.json();
+        toast({
+          title: 'Erro',
+          description: errorData.error || 'Erro ao resetar senha',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error resetting password:', error);
+      toast({
+        title: 'Erro',
+        description: 'Erro ao resetar senha',
+        variant: 'destructive',
+      });
+    } finally {
+      setResetingUserId(null);
     }
   };
 
@@ -220,13 +274,14 @@ export default function UsersPage() {
                     <TableHead>Workspaces</TableHead>
                     <TableHead>Último Login</TableHead>
                     <TableHead>Criado em</TableHead>
+                    <TableHead className="text-center">Ações</TableHead>
                     <TableHead className="text-right">Alterar Role</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {users.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8">
+                      <TableCell colSpan={8} className="text-center py-8">
                         <div className="text-gray-500 dark:text-gray-400">
                           <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
                           <p>Nenhum usuário encontrado</p>
@@ -271,6 +326,18 @@ export default function UsersPage() {
                         </TableCell>
                         <TableCell>
                           {new Date(user.createdAt).toLocaleDateString('pt-BR')}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => resetUserPassword(user.id, user.name || user.fullName)}
+                            disabled={resetingUserId === user.id}
+                            className="h-8 px-2"
+                          >
+                            <Key className="h-3 w-3 mr-1" />
+                            {resetingUserId === user.id ? 'Resetando...' : 'Resetar Senha'}
+                          </Button>
                         </TableCell>
                         <TableCell className="text-right">
                           <Select 
@@ -321,6 +388,51 @@ export default function UsersPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Password Reset Dialog */}
+      <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <Key className="h-5 w-5 mr-2 text-green-600" />
+              Senha Temporária Gerada
+            </DialogTitle>
+            <DialogDescription>
+              A senha foi resetada com sucesso. Compartilhe essa senha temporária com o usuário:
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center space-x-2">
+            <div className="grid flex-1 gap-2">
+              <div className="flex items-center justify-center">
+                <div className="bg-gray-100 dark:bg-gray-800 px-4 py-3 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600">
+                  <span className="text-lg font-mono font-bold text-purple-600 dark:text-purple-400">
+                    {tempPassword}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-center space-x-2 mt-4">
+            <Button
+              size="sm"
+              onClick={() => {
+                navigator.clipboard.writeText(tempPassword);
+                toast({
+                  title: 'Copiado!',
+                  description: 'Senha copiada para a área de transferência',
+                });
+              }}
+            >
+              Copiar Senha
+            </Button>
+            <DialogClose asChild>
+              <Button size="sm" variant="outline">
+                Fechar
+              </Button>
+            </DialogClose>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

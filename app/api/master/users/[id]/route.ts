@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getMasterSession, withMasterAuth } from '@/lib/master-auth'
 import { prisma } from '@/lib/db'
 import { UserRole } from '@prisma/client'
+import bcrypt from 'bcryptjs'
 
 interface RouteParams {
   params: {
@@ -21,9 +22,30 @@ export async function PATCH(
     const { id } = params
     const body = await request.json()
     
-    const { role } = body
+    const { action, role } = body
 
-    // Validate input
+    // Handle password reset action
+    if (action === 'reset-password') {
+      // Generate temporary password (Reset + 4 random digits)
+      const randomDigits = Math.floor(1000 + Math.random() * 9000).toString()
+      const tempPassword = `Reset${randomDigits}`
+      
+      // Hash the temporary password
+      const hashedPassword = await bcrypt.hash(tempPassword, 10)
+      
+      // Update user password
+      await prisma.user.update({
+        where: { id },
+        data: { password: hashedPassword },
+      })
+
+      return NextResponse.json({
+        message: 'Senha resetada com sucesso',
+        tempPassword: tempPassword
+      })
+    }
+
+    // Handle role update
     if (!role || !Object.values(UserRole).includes(role)) {
       return NextResponse.json(
         { error: 'Valid role is required' },
@@ -45,7 +67,7 @@ export async function PATCH(
 
     // Get current master session to prevent self-demotion
     const session = await getMasterSession()
-    if (currentUser.id === session.user.id && role !== UserRole.MASTER) {
+    if (currentUser.id === (session.user as any).id && role !== UserRole.MASTER) {
       return NextResponse.json(
         { error: 'Cannot remove MASTER role from yourself' },
         { status: 400 }
@@ -57,7 +79,7 @@ export async function PATCH(
       where: { id },
       data: { role },
       include: {
-        workspaces: {
+        workspace: {
           select: {
             id: true,
             name: true,
@@ -76,7 +98,7 @@ export async function PATCH(
       role: user.role,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
-      workspaces: user.workspaces
+      workspace: user.workspace
     })
   } catch (error) {
     console.error('Error updating user:', error)
@@ -109,7 +131,7 @@ export async function GET(
     const user = await prisma.user.findUnique({
       where: { id },
       include: {
-        workspaces: {
+        workspace: {
           include: {
             _count: {
               select: {
@@ -144,7 +166,7 @@ export async function GET(
       role: user.role,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
-      workspaces: user.workspaces,
+      workspace: user.workspace,
       recentSessions: user.sessions
     })
   } catch (error) {

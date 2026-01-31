@@ -44,8 +44,8 @@ export async function GET(req: NextRequest) {
     // Get all users in the same workspace
     const users = await prisma.user.findMany({
       where: {
-        workspaces: {
-          some: { id: workspace.id },
+        workspace: {
+          id: workspace.id
         },
       },
       select: {

@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       prisma.user.findMany({
         where,
         include: {
-          workspaces: {
+          workspace: {
             select: {
               id: true,
               name: true,
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
       role: user.role,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
-      workspaces: user.workspaces,
+      workspace: user.workspace,
       lastLogin: user.sessions[0]?.expires || null
     }))
 

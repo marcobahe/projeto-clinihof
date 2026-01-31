@@ -21,14 +21,14 @@ export default function MasterLayout({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (session.user?.role !== UserRole.MASTER) {
+    if ((session.user as any)?.role !== UserRole.MASTER) {
       router.push('/dashboard');
       return;
     }
   }, [session, status, router]);
 
   // Show loading while checking auth
-  if (status === 'loading' || !session || session.user?.role !== UserRole.MASTER) {
+  if (status === 'loading' || !session || (session.user as any)?.role !== UserRole.MASTER) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50 dark:bg-gray-950">
         <div className="text-center">

@@ -18,7 +18,7 @@ export function useRequirePermission(resource: keyof typeof PERMISSIONS, require
       return
     }
 
-    const userRole = session.user.role as UserRole
+    const userRole = (session.user as any).role as UserRole
     
     // Verificar se tem permissão de leitura
     if (!canAccess(userRole, resource)) {

@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Search, User, Mail, Loader2, Edit, Trash2, UserCheck, Shield, Users } from 'lucide-react';
+import { Plus, Search, User, Mail, Loader2, Edit, Trash2, UserCheck, Shield, Users, Key } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import {
   Dialog,
@@ -55,6 +55,9 @@ export default function TeamPage() {
   });
   const [isInviting, setIsInviting] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [tempPassword, setTempPassword] = useState('');
+  const [resetingUserId, setResetingUserId] = useState<string | null>(null);
 
   const fetchMembers = async () => {
     try {
@@ -188,6 +191,40 @@ export default function TeamPage() {
     }
   };
 
+  const handleResetPassword = async (memberId: string, memberName: string) => {
+    try {
+      setResetingUserId(memberId);
+      const response = await fetch(`/api/team/${memberId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'reset-password' }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setTempPassword(data.tempPassword);
+        setResetDialogOpen(true);
+        toast({
+          title: 'Senha resetada',
+          description: `Senha temporária gerada para ${memberName}`,
+        });
+      } else {
+        const error = await response.json();
+        throw new Error(error.error || 'Erro ao resetar senha');
+      }
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: error instanceof Error ? error.message : 'Erro ao resetar senha',
+        variant: 'destructive',
+      });
+    } finally {
+      setResetingUserId(null);
+    }
+  };
+
   const filteredMembers = members.filter(member =>
     member.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     member.email.toLowerCase().includes(searchQuery.toLowerCase())
@@ -205,8 +242,8 @@ export default function TeamPage() {
     return roleConfig[role] || { label: role, variant: 'outline' as const };
   };
 
-  const canInvite = session?.user?.email && canManageTeam(session.user.role as UserRole);
-  const userRole = session?.user?.role as UserRole;
+  const canInvite = session?.user?.email && canManageTeam((session.user as any).role as UserRole);
+  const userRole = (session?.user as any)?.role as UserRole;
 
   if (isLoading || permissionLoading) {
     return (
@@ -344,6 +381,16 @@ export default function TeamPage() {
                       <Button
                         variant="outline"
                         size="sm"
+                        onClick={() => handleResetPassword(member.id, member.fullName)}
+                        disabled={resetingUserId === member.id}
+                        title="Resetar senha"
+                      >
+                        <Key className="h-4 w-4" />
+                      </Button>
+                      
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => {
                           setEditingMember(member);
                           setIsEditDialogOpen(true);
@@ -424,6 +471,50 @@ export default function TeamPage() {
             <Button onClick={handleUpdateRole} disabled={isUpdating}>
               {isUpdating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Atualizar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Password Reset Dialog */}
+      <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <Key className="h-5 w-5 mr-2 text-green-600" />
+              Senha Temporária Gerada
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              A senha foi resetada com sucesso. Compartilhe essa senha temporária com o usuário:
+            </p>
+            <div className="flex items-center justify-center">
+              <div className="bg-gray-100 dark:bg-gray-800 px-4 py-3 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600">
+                <span className="text-lg font-mono font-bold text-purple-600 dark:text-purple-400">
+                  {tempPassword}
+                </span>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground text-center">
+              O usuário deve alterar esta senha no primeiro login.
+            </p>
+          </div>
+          <DialogFooter className="flex justify-center space-x-2">
+            <Button
+              size="sm"
+              onClick={() => {
+                navigator.clipboard.writeText(tempPassword);
+                toast({
+                  title: 'Copiado!',
+                  description: 'Senha copiada para a área de transferência',
+                });
+              }}
+            >
+              Copiar Senha
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setResetDialogOpen(false)}>
+              Fechar
             </Button>
           </DialogFooter>
         </DialogContent>

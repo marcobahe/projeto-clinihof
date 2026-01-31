@@ -160,7 +160,7 @@ export default function AdminsPage() {
     admin.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const currentUserId = session?.user?.id;
+  const currentUserId = (session?.user as any)?.id;
 
   if (isLoading) {
     return (

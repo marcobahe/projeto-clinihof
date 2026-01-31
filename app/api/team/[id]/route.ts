@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { canManageTeam } from '@/lib/permissions'
+import bcrypt from 'bcryptjs'
 
 export async function PATCH(
   request: NextRequest,
@@ -15,7 +16,74 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { role } = await request.json()
+    const { action, role } = await request.json()
+
+    // Handle password reset action
+    if (action === 'reset-password') {
+      // Buscar usuário alvo
+      const targetUser = await prisma.user.findUnique({
+        where: { id: params.id },
+      })
+
+      if (!targetUser) {
+        return NextResponse.json({ error: 'Target user not found' }, { status: 404 })
+      }
+
+      // Buscar usuário logado
+      const currentUser = await prisma.user.findUnique({
+        where: { email: session.user.email },
+        include: {
+          workspace: true,
+          ownedWorkspaces: true,
+        },
+      })
+
+      if (!currentUser) {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      }
+
+      // Determinar workspace atual
+      const currentWorkspace = currentUser.ownedWorkspaces[0] || currentUser.workspace
+      
+      if (!currentWorkspace) {
+        return NextResponse.json({ error: 'No workspace found' }, { status: 404 })
+      }
+
+      // Verificar se o usuário alvo pertence ao mesmo workspace
+      const isInSameWorkspace = 
+        targetUser.workspaceId === currentWorkspace.id ||
+        targetUser.id === currentWorkspace.ownerId
+
+      if (!isInSameWorkspace) {
+        return NextResponse.json(
+          { error: 'User does not belong to your workspace' },
+          { status: 403 }
+        )
+      }
+
+      // Verificar se tem permissão para resetar senha
+      if (!canManageTeam(currentUser.role, targetUser.role)) {
+        return NextResponse.json({ error: 'Forbidden to reset password for this user' }, { status: 403 })
+      }
+
+      // Generate temporary password (Reset + 4 random digits)
+      const randomDigits = Math.floor(1000 + Math.random() * 9000).toString()
+      const tempPassword = `Reset${randomDigits}`
+      
+      // Hash the temporary password
+      const hashedPassword = await bcrypt.hash(tempPassword, 10)
+      
+      // Update user password
+      await prisma.user.update({
+        where: { id: params.id },
+        data: { password: hashedPassword },
+      })
+
+      return NextResponse.json({
+        message: 'Senha resetada com sucesso',
+        tempPassword: tempPassword
+      })
+    }
 
     if (!role) {
       return NextResponse.json({ error: 'Role is required' }, { status: 400 })

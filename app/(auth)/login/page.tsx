@@ -122,6 +122,13 @@ export default function LoginPage() {
         </Button>
       </form>
 
+      {/* Forgot Password Link */}
+      <div className="mt-4 text-center">
+        <Link href="/forgot-password" className="text-sm text-purple-600 hover:text-purple-700">
+          Esqueceu sua senha?
+        </Link>
+      </div>
+
       {/* Divider */}
       <div className="relative my-6">
         <div className="absolute inset-0 flex items-center">

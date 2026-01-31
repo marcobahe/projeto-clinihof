@@ -163,7 +163,7 @@ function SidebarContent({
       </div>
 
       {/* Master Panel Link */}
-      {user?.role === 'MASTER' && (
+      {(user as any)?.role === 'MASTER' && (
         <div className="px-3 pt-4 pb-2">
           <Link
             href="/master"
@@ -188,8 +188,8 @@ function SidebarContent({
             if (item.alwaysVisible) return true;
             
             // Filtrar baseado nas permissões do usuário
-            if (!user?.role) return false;
-            return getVisibleMenuItems(user.role as UserRole)
+            if (!(user as any)?.role) return false;
+            return getVisibleMenuItems((user as any).role as UserRole)
               .some(visibleItem => visibleItem.key === item.key);
           })
           .map((item) => {
