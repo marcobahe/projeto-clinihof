@@ -39,7 +39,7 @@ export const PERMISSIONS = {
 // Função para verificar se um role tem acesso a um recurso
 export function canAccess(role: UserRole, resource: keyof typeof PERMISSIONS): boolean {
   if (!role || !resource) return false
-  return PERMISSIONS[resource]?.includes(role) ?? false
+  return (PERMISSIONS[resource] as readonly string[])?.includes(role) ?? false
 }
 
 // Função para verificar permissões de escrita (modificar dados)

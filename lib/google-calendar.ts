@@ -177,13 +177,11 @@ export async function syncSessionToGoogleCalendar(
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: {
-      workspaces: {
-        take: 1,
-      },
+      workspace: true,
     },
   });
 
-  const workspace = user?.workspaces?.[0];
+  const workspace = user?.workspace;
   if (!workspace) {
     return null;
   }

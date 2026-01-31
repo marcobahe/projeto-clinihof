@@ -2,6 +2,21 @@ import { UserRole } from '@prisma/client';
 
 // Permission levels for different features
 export const PERMISSIONS = {
+  // Master: Platform owner - same as Admin
+  MASTER: {
+    canAccessSettings: true,
+    canManageUsers: true,
+    canViewFinancials: true,
+    canEditFinancials: true,
+    canViewReports: true,
+    canManageAppointments: true,
+    canManagePatients: true,
+    canManageSales: true,
+    canManageCosts: true,
+    canManageCollaborators: true,
+    canManageProcedures: true,
+    canManageSupplies: true,
+  },
   // Admin: Full access
   ADMIN: {
     canAccessSettings: true,
@@ -80,6 +95,7 @@ export function getUserPermissions(role: UserRole | undefined) {
 
 // Role labels in Portuguese
 export const roleLabels: Record<UserRole, string> = {
+  MASTER: 'Master',
   ADMIN: 'Administrador',
   MANAGER: 'Gerente',
   USER: 'Usuário',
@@ -88,6 +104,7 @@ export const roleLabels: Record<UserRole, string> = {
 
 // Role descriptions
 export const roleDescriptions: Record<UserRole, string> = {
+  MASTER: 'Dono da plataforma — acesso total a tudo',
   ADMIN: 'Acesso total ao sistema, incluindo configurações e gerenciamento de usuários',
   MANAGER: 'Acesso a relatórios, vendas, agendamentos e pacientes (sem configurações)',
   USER: 'Acesso a agendamentos, pacientes e vendas próprias',

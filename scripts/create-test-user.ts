@@ -25,28 +25,34 @@ async function main() {
       console.log('Password updated successfully!');
     } else {
       console.log('Creating new user and workspace...');
-      
-      // Create user with workspace
-      const user = await prisma.user.create({
+
+      // Create workspace first
+      const workspace = await prisma.workspace.create({
         data: {
-          email: 'john@doe.com',
-          password: bcrypt.hashSync('johndoe123', 10),
-          name: 'John Doe',
-          fullName: 'John Doe',
-          workspaces: {
+          name: 'Clínica John Doe',
+          owner: {
             create: {
-              name: 'Clínica John Doe',
+              email: 'john@doe.com',
+              password: bcrypt.hashSync('johndoe123', 10),
+              name: 'John Doe',
+              fullName: 'John Doe',
             }
           }
         },
         include: {
-          workspaces: true
+          owner: true,
         }
       });
-      
+
       console.log('User created successfully!');
-      console.log('User ID:', user.id);
-      console.log('Workspace ID:', user.workspaces[0].id);
+      console.log('User ID:', workspace.owner.id);
+      console.log('Workspace ID:', workspace.id);
+
+      // Link user to workspace
+      await prisma.user.update({
+        where: { id: workspace.owner.id },
+        data: { workspaceId: workspace.id }
+      });
     }
   } catch (error) {
     console.error('Error:', error);

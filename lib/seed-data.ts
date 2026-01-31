@@ -12,6 +12,13 @@ export async function createExampleData(
 ) {
   console.log(`Creating example data for workspace ${workspaceId}...`);
 
+  // Helper function to generate realistic time
+  const getRandomTime = () => {
+    const hours = 8 + Math.floor(Math.random() * 10); // 8-17h
+    const minutes = Math.random() < 0.5 ? 0 : 30; // :00 or :30
+    return { hours, minutes };
+  };
+
   // ========== CREATE SUPPLIES (INSUMOS) ==========
   const suppliesData = [
     { name: 'Toxina Botulínica (50U)', unit: 'Frasco', costPerUnit: 450.0, stockQty: 10, minStock: 3 },
@@ -452,13 +459,6 @@ export async function createExampleData(
         },
       },
     });
-
-    // Helper function to generate realistic time
-    const getRandomTime = () => {
-      const hours = 8 + Math.floor(Math.random() * 10); // 8-17h
-      const minutes = Math.random() < 0.5 ? 0 : 30; // :00 or :30
-      return { hours, minutes };
-    };
 
     // Create 8 sessions - 1 completed, 7 pending
     const { hours: h1, minutes: m1 } = getRandomTime();
