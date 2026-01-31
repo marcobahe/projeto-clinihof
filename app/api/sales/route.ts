@@ -37,6 +37,13 @@ export async function GET(request: NextRequest) {
             commissionValue: true,
           },
         },
+        package: {
+          select: {
+            id: true,
+            name: true,
+            finalPrice: true,
+          },
+        },
         items: {
           include: {
             procedure: true,
@@ -102,6 +109,7 @@ export async function POST(request: NextRequest) {
     const {
       patientId,
       sellerId, // Vendedor/Colaborador responsável
+      packageId, // Pacote selecionado (opcional)
       saleDate,
       totalAmount,
       paymentMethod, // deprecated - mantido para compatibilidade
@@ -113,8 +121,42 @@ export async function POST(request: NextRequest) {
       sessionDates, // array de datas para cada sessão
     } = body;
 
+    // If package is selected, get items from package
+    let saleItems = items;
+    let calculatedTotal = totalAmount;
+
+    if (packageId) {
+      const selectedPackage = await prisma.package.findUnique({
+        where: { id: packageId },
+        include: {
+          items: {
+            include: {
+              procedure: true,
+            },
+          },
+        },
+      });
+
+      if (!selectedPackage) {
+        return NextResponse.json(
+          { error: 'Pacote não encontrado' },
+          { status: 404 }
+        );
+      }
+
+      // Use package items as sale items
+      saleItems = selectedPackage.items.map((item) => ({
+        procedureId: item.procedureId,
+        quantity: item.quantity,
+        unitPrice: item.procedure.price,
+      }));
+
+      // Use package price as total
+      calculatedTotal = totalAmount || selectedPackage.finalPrice;
+    }
+
     // Validate required fields
-    if (!patientId || !totalAmount || !items || items.length === 0) {
+    if (!patientId || !calculatedTotal || !saleItems || saleItems.length === 0) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
@@ -129,9 +171,9 @@ export async function POST(request: NextRequest) {
         0
       );
       
-      if (Math.abs(splitsTotal - parseFloat(totalAmount)) > 0.01) {
+      if (Math.abs(splitsTotal - parseFloat(calculatedTotal)) > 0.01) {
         return NextResponse.json(
-          { error: `A soma dos pagamentos (R$ ${splitsTotal.toFixed(2)}) deve ser igual ao total da venda (R$ ${parseFloat(totalAmount).toFixed(2)})` },
+          { error: `A soma dos pagamentos (R$ ${splitsTotal.toFixed(2)}) deve ser igual ao total da venda (R$ ${parseFloat(calculatedTotal).toFixed(2)})` },
           { status: 400 }
         );
       }
@@ -159,14 +201,17 @@ export async function POST(request: NextRequest) {
         workspaceId: workspace.id,
         patientId,
         sellerId: sellerId || null, // Vendedor/Colaborador responsável
+        packageId: packageId || null, // Pacote selecionado
         saleDate: saleDate ? new Date(saleDate) : new Date(),
-        totalAmount: parseFloat(totalAmount),
+        totalAmount: parseFloat(calculatedTotal),
         paymentMethod: paymentMethod || null, // deprecated
         installments: installments || 1, // deprecated
         paymentStatus: paymentStatus || 'PENDING',
-        notes,
+        notes: packageId 
+          ? `${notes || ''}\nVenda de pacote`.trim()
+          : notes,
         items: {
-          create: items.map((item: any) => ({
+          create: saleItems.map((item: any) => ({
             procedureId: item.procedureId,
             quantity: parseInt(item.quantity),
             unitPrice: parseFloat(item.unitPrice),

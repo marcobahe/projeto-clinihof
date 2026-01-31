@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, addWeeks, isSameDay, isSameMonth, startOfDay, endOfDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, User, Edit2, Check, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, User, Edit2, Check, X, Plus, CalendarPlus, ListFilter } from 'lucide-react';
+import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { SessionStatus, AppointmentType } from '@prisma/client';
+import { AppointmentModal } from '@/components/forms/appointment-modal';
 
 type ViewMode = 'month' | 'week' | 'day';
 
@@ -114,6 +116,24 @@ export default function AgendaPage() {
   const [editStatus, setEditStatus] = useState<SessionStatus>('PENDING');
   const [editAppointmentType, setEditAppointmentType] = useState<AppointmentType | null>(null);
   const [editNotes, setEditNotes] = useState('');
+
+  // Estados para criação de agendamento
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createModalDate, setCreateModalDate] = useState<Date | undefined>(undefined);
+  const [createModalTime, setCreateModalTime] = useState<string | undefined>(undefined);
+
+  // Abrir modal de criação ao clicar em um slot
+  const handleSlotClick = (date: Date, time?: string) => {
+    setCreateModalDate(date);
+    setCreateModalTime(time);
+    setIsCreateModalOpen(true);
+  };
+
+  // Callback quando agendamento é criado com sucesso
+  const handleAppointmentCreated = () => {
+    fetchAppointments();
+    fetchMonthStats();
+  };
 
   // Buscar agendamentos
   const fetchAppointments = async () => {
@@ -311,12 +331,18 @@ export default function AgendaPage() {
             return (
               <div
                 key={index}
-                onClick={() => setSelectedDate(day)}
+                onClick={() => {
+                  setSelectedDate(day);
+                }}
+                onDoubleClick={() => {
+                  handleSlotClick(day, '09:00');
+                }}
                 className={`min-h-[100px] p-2 border-b border-r border-gray-200 dark:border-gray-700 cursor-pointer transition-colors ${
                   !isCurrentMonth ? 'bg-gray-50 dark:bg-gray-800/50' : ''
                 } ${
                   isSelected ? 'bg-purple-50 dark:bg-purple-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800'
                 }`}
+                title="Clique duplo para criar agendamento"
               >
                 <div className="flex justify-between items-start mb-1">
                   <span
@@ -330,11 +356,23 @@ export default function AgendaPage() {
                   >
                     {format(day, 'd')}
                   </span>
-                  {dayAppointments.length > 0 && (
-                    <Badge variant="secondary" className="text-xs">
-                      {dayAppointments.length}
-                    </Badge>
-                  )}
+                  <div className="flex items-center gap-1">
+                    {dayAppointments.length > 0 && (
+                      <Badge variant="secondary" className="text-xs">
+                        {dayAppointments.length}
+                      </Badge>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSlotClick(day, '09:00');
+                      }}
+                      className="opacity-0 group-hover:opacity-100 hover:opacity-100 p-0.5 rounded hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-opacity"
+                      title="Criar agendamento"
+                    >
+                      <Plus className="h-3 w-3 text-purple-600" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Lista de agendamentos do dia (máx 2 visíveis) */}
@@ -483,13 +521,30 @@ export default function AgendaPage() {
   return (
     <div className="space-y-6">
       {/* Cabeçalho */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-          Agenda
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400">
-          Gerencie seus agendamentos e acompanhe o comparecimento dos pacientes
-        </p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+            Agenda
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            Gerencie seus agendamentos e acompanhe o comparecimento dos pacientes
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Link href="/agenda/futuros">
+            <Button variant="outline">
+              <ListFilter className="h-4 w-4 mr-2" />
+              Ver Futuros
+            </Button>
+          </Link>
+          <Button 
+            onClick={() => handleSlotClick(new Date())} 
+            className="bg-purple-600 hover:bg-purple-700"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Novo Agendamento
+          </Button>
+        </div>
       </div>
 
       {/* Legenda de Classificação de Consultas */}
@@ -817,6 +872,15 @@ export default function AgendaPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Modal de Criação de Agendamento */}
+      <AppointmentModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={handleAppointmentCreated}
+        preselectedDate={createModalDate}
+        preselectedTime={createModalTime}
+      />
     </div>
   );
 }

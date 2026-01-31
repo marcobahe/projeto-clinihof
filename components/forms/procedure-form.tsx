@@ -5,13 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
-import { Loader2, Palette } from 'lucide-react';
+import { Loader2, Palette, DollarSign } from 'lucide-react';
 
 interface Procedure {
   id: string;
   name: string;
   price: number;
   duration: number;
+  fixedCost?: number | null;
   color?: string | null;
 }
 
@@ -39,6 +40,7 @@ export function ProcedureForm({ procedure, onSuccess }: ProcedureFormProps) {
     name: procedure?.name ?? '',
     price: procedure?.price?.toString() ?? '',
     duration: procedure?.duration?.toString() ?? '',
+    fixedCost: procedure?.fixedCost?.toString() ?? '0',
     color: procedure?.color ?? '',
   });
 
@@ -57,6 +59,7 @@ export function ProcedureForm({ procedure, onSuccess }: ProcedureFormProps) {
           name: formData.name,
           price: parseFloat(formData.price),
           duration: parseInt(formData.duration),
+          fixedCost: parseFloat(formData.fixedCost) || 0,
           color: formData.color || null,
         }),
       });
@@ -122,6 +125,25 @@ export function ProcedureForm({ procedure, onSuccess }: ProcedureFormProps) {
           required
           placeholder="60"
         />
+      </div>
+
+      <div>
+        <Label htmlFor="fixedCost" className="flex items-center gap-2">
+          <DollarSign className="h-4 w-4" />
+          Custo Fixo (R$)
+        </Label>
+        <Input
+          id="fixedCost"
+          type="number"
+          step="0.01"
+          min="0"
+          value={formData.fixedCost}
+          onChange={(e) => setFormData({ ...formData, fixedCost: e.target.value })}
+          placeholder="0.00"
+        />
+        <p className="text-xs text-gray-500 mt-1">
+          Custo fixo base do procedimento (equipamentos, produtos exclusivos, etc.)
+        </p>
       </div>
 
       <div>

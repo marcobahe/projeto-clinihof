@@ -25,6 +25,17 @@ interface Procedure {
   price: number;
 }
 
+interface Package {
+  id: string;
+  name: string;
+  finalPrice: number;
+  items: Array<{
+    procedureId: string;
+    quantity: number;
+    procedure: Procedure;
+  }>;
+}
+
 interface SaleItem {
   id: string;
   procedureId: string;
@@ -92,6 +103,7 @@ export default function AppointmentsPage() {
   const [sales, setSales] = useState<Sale[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [procedures, setProcedures] = useState<Procedure[]>([]);
+  const [packages, setPackages] = useState<Package[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -102,6 +114,8 @@ export default function AppointmentsPage() {
   // Form state
   const [selectedPatient, setSelectedPatient] = useState('');
   const [selectedProcedure, setSelectedProcedure] = useState('');
+  const [selectedPackage, setSelectedPackage] = useState('');
+  const [saleType, setSaleType] = useState<'individual' | 'package'>('individual');
   const [quantity, setQuantity] = useState('1');
   const [saleDate, setSaleDate] = useState('');
   const [sessionDates, setSessionDates] = useState<string[]>([]);
@@ -189,12 +203,13 @@ export default function AppointmentsPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [statsRes, salesRes, patientsRes, proceduresRes, cardFeesRes] = await Promise.all([
+      const [statsRes, salesRes, patientsRes, proceduresRes, cardFeesRes, packagesRes] = await Promise.all([
         fetch('/api/sales/stats'),
         fetch('/api/sales'),
         fetch('/api/patients'),
         fetch('/api/procedures'),
         fetch('/api/costs/card-fees'),
+        fetch('/api/packages'),
       ]);
 
       if (statsRes.ok) setStats(await statsRes.json());
@@ -205,6 +220,7 @@ export default function AppointmentsPage() {
         const cardFeesData = await cardFeesRes.json();
         setCardFeeRules(cardFeesData.rules || []);
       }
+      if (packagesRes.ok) setPackages(await packagesRes.json());
     } catch (error) {
       console.error('Error loading data:', error);
       toast.error('Erro ao carregar dados');

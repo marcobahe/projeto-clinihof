@@ -224,6 +224,7 @@ model Procedure {
   name        String
   price       Float    // Preço de venda em R$
   duration    Int      // Duração média em minutos
+  fixedCost   Float?   @default(0) // Custo fixo do procedimento em R$
   color       String?  // Cor para exibição no calendário (hex code)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -245,6 +246,7 @@ model Sale {
   workspaceId      String
   patientId        String
   sellerId         String?       // Vendedor/Colaborador responsável pela venda
+  packageId        String?       // Pacote vendido (quando venda é de pacote)
   saleDate         DateTime      @default(now()) // Data da venda
   totalAmount      Float         // Valor total cobrado
   paymentMethod    PaymentMethod? // Forma de pagamento (deprecated - usar PaymentSplit)
@@ -257,6 +259,7 @@ model Sale {
   workspace        Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   patient          Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
   seller           Collaborator?      @relation(fields: [sellerId], references: [id])
+  package          Package?           @relation(fields: [packageId], references: [id])
   items            SaleItem[]         // Procedimentos incluídos na venda
   sessions         ProcedureSession[] // Sessões de execução
   paymentSplits    PaymentSplit[]     // Split de pagamentos (nova feature)
@@ -264,6 +267,7 @@ model Sale {
   @@index([workspaceId])
   @@index([patientId])
   @@index([sellerId])
+  @@index([packageId])
   @@index([saleDate])
 }
 
@@ -323,10 +327,12 @@ model ProcedureSession {
   id              String           @id @default(cuid())
   saleId          String
   procedureId     String
+  collaboratorId  String?          // Profissional responsável pela sessão
   scheduledDate   DateTime?        // Data agendada para a sessão
   completedDate   DateTime?        // Data de conclusão
   status          SessionStatus    @default(PENDING)
   appointmentType AppointmentType? // Tipo de consulta (primeira consulta, pendência, retorno)
+  googleEventId   String?          // ID do evento no Google Calendar para sync
   notes           String?          @db.Text
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
@@ -338,6 +344,7 @@ model ProcedureSession {
   @@index([scheduledDate])
   @@index([status])
   @@index([appointmentType])
+  @@index([googleEventId])
 }
 
 enum PaymentMethod {
@@ -485,6 +492,7 @@ model Package {
   
   workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   items           PackageItem[]   // Procedimentos incluídos no pacote
+  sales           Sale[]          // Vendas que usaram este pacote
   
   @@index([workspaceId])
   @@index([isActive])
@@ -576,4 +584,27 @@ model QuoteItem {
   
   @@index([quoteId])
   @@index([procedureId])
+}
+
+
+// WorkspaceSettings - Configurações da clínica/workspace
+model WorkspaceSettings {
+  id                    String    @id @default(cuid())
+  workspaceId           String    @unique
+  
+  // Custos fixos da clínica
+  monthlyFixedCosts     Float     @default(0) // Total de custos fixos mensais em R$
+  monthlyWorkingHours   Float     @default(176) // Horas trabalhadas por mês (22 dias × 8h)
+  hourlyClinicCost      Float?    // Custo por hora da clínica (calculado: monthlyFixedCosts / monthlyWorkingHours)
+  
+  // Google Calendar sync settings
+  googleCalendarEnabled Boolean   @default(false) // Se a sincronização está ativa
+  googleCalendarId      String?   // ID do calendário Google a sincronizar
+  googleSyncToken       String?   // Token para sync incremental
+  lastGoogleSync        DateTime? // Última sincronização
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  
+  @@index([workspaceId])
 }

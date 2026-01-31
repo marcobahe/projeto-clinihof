@@ -83,7 +83,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     }
 
     const body = await req.json();
-    const { name, price, duration, color, supplies, collaborators } = body;
+    const { name, price, duration, fixedCost, color, supplies, collaborators } = body;
 
     if (!name || price === undefined) {
       return NextResponse.json(
@@ -109,6 +109,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
           name,
           price: parseFloat(price),
           duration: parseInt(duration) || 0,
+          fixedCost: fixedCost !== undefined ? parseFloat(fixedCost) || 0 : undefined,
           color: color !== undefined ? (color || null) : undefined,
           supplies: supplies?.length > 0 ? {
             create: supplies.map((s: { supplyId: string; quantity: number }) => ({

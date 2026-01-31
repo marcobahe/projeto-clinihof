@@ -6,6 +6,43 @@ import { getUserWorkspace } from '@/lib/workspace';
 
 export const dynamic = 'force-dynamic';
 
+// Helper function to calculate procedure costs
+function calculateProcedureCosts(procedure: any) {
+  // Calculate supply costs
+  const supplyCost = procedure.supplies?.reduce((sum: number, ps: any) => {
+    return sum + (ps.supply?.costPerUnit || 0) * ps.quantity;
+  }, 0) || 0;
+
+  // Calculate collaborator costs
+  const collaboratorCost = procedure.collaborators?.reduce((sum: number, pc: any) => {
+    if (!pc.collaborator) return sum;
+    const hourlyCost = (pc.collaborator.baseSalary + pc.collaborator.charges) / pc.collaborator.monthlyHours;
+    const timeCost = (pc.timeMinutes / 60) * hourlyCost;
+    return sum + timeCost;
+  }, 0) || 0;
+
+  // Total cost = fixedCost + supplyCost + collaboratorCost
+  const totalCost = (procedure.fixedCost || 0) + supplyCost + collaboratorCost;
+
+  // Profit margin
+  const profitMargin = procedure.price > 0 ? ((procedure.price - totalCost) / procedure.price) * 100 : 0;
+
+  return {
+    ...procedure,
+    supplyCost,
+    collaboratorCost,
+    totalCost,
+    profitMargin,
+    collaborators: procedure.collaborators?.map((pc: any) => ({
+      ...pc,
+      collaborator: pc.collaborator ? {
+        ...pc.collaborator,
+        hourlyCost: (pc.collaborator.baseSalary + pc.collaborator.charges) / pc.collaborator.monthlyHours
+      } : null
+    }))
+  };
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -37,17 +74,8 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // Calculate hourlyCost for each collaborator in each procedure
-    const proceduresWithCost = procedures.map(proc => ({
-      ...proc,
-      collaborators: proc.collaborators.map(pc => ({
-        ...pc,
-        collaborator: pc.collaborator ? {
-          ...pc.collaborator,
-          hourlyCost: (pc.collaborator.baseSalary + pc.collaborator.charges) / pc.collaborator.monthlyHours
-        } : null
-      }))
-    }));
+    // Calculate costs for each procedure
+    const proceduresWithCost = procedures.map(proc => calculateProcedureCosts(proc));
 
     return NextResponse.json(proceduresWithCost);
   } catch (error) {
@@ -71,7 +99,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { name, price, duration, color, supplies, collaborators } = body;
+    const { name, price, duration, fixedCost, color, supplies, collaborators } = body;
 
     if (!name || price === undefined) {
       return NextResponse.json(
@@ -86,6 +114,7 @@ export async function POST(req: NextRequest) {
         name,
         price: parseFloat(price),
         duration: parseInt(duration) || 0,
+        fixedCost: fixedCost ? parseFloat(fixedCost) : 0,
         color: color || null,
         supplies: supplies?.length > 0 ? {
           create: supplies.map((s: { supplyId: string; quantity: number }) => ({
@@ -114,17 +143,8 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Calculate hourlyCost for each collaborator
-    const procedureWithCost = {
-      ...procedure,
-      collaborators: procedure.collaborators.map(pc => ({
-        ...pc,
-        collaborator: pc.collaborator ? {
-          ...pc.collaborator,
-          hourlyCost: (pc.collaborator.baseSalary + pc.collaborator.charges) / pc.collaborator.monthlyHours
-        } : null
-      }))
-    };
+    // Calculate hourlyCost for each collaborator and total cost
+    const procedureWithCost = calculateProcedureCosts(procedure);
 
     return NextResponse.json(procedureWithCost, { status: 201 });
   } catch (error) {
