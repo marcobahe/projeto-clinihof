@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, addWeeks, isSameDay, isSameMonth, startOfDay, endOfDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, User, Edit2, Check, X, Plus, CalendarPlus, ListFilter } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, User, Edit2, Check, X, Plus, CalendarPlus, ListFilter, Tag as TagIcon } from 'lucide-react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { SessionStatus, AppointmentType } from '@prisma/client';
 import { AppointmentModal } from '@/components/forms/appointment-modal';
+import { CalendarEventModal } from '@/components/calendar-event-modal';
+import { TagManager } from '@/components/tag-manager';
 
 type ViewMode = 'month' | 'week' | 'day';
 
@@ -38,6 +40,24 @@ interface Appointment {
       name: string;
       phone: string;
     };
+  };
+}
+
+interface CalendarEvent {
+  id: string;
+  title: string;
+  description: string | null;
+  startDate: string;
+  endDate: string;
+  tagId: string | null;
+  tag: {
+    id: string;
+    name: string;
+    color: string;
+  } | null;
+  createdBy: {
+    id: string;
+    fullName: string;
   };
 }
 
@@ -122,6 +142,17 @@ export default function AgendaPage() {
   const [createModalDate, setCreateModalDate] = useState<Date | undefined>(undefined);
   const [createModalTime, setCreateModalTime] = useState<string | undefined>(undefined);
 
+  // Estados para eventos do calendário
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [isEventModalOpen, setIsEventModalOpen] = useState(false);
+  const [eventModalDate, setEventModalDate] = useState<Date | undefined>(undefined);
+  const [eventModalEndDate, setEventModalEndDate] = useState<Date | undefined>(undefined);
+  const [eventModalTime, setEventModalTime] = useState<string | undefined>(undefined);
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+
+  // Estado para tag manager
+  const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
+
   // Abrir modal de criação ao clicar em um slot
   const handleSlotClick = (date: Date, time?: string) => {
     setCreateModalDate(date);
@@ -133,6 +164,72 @@ export default function AgendaPage() {
   const handleAppointmentCreated = () => {
     fetchAppointments();
     fetchMonthStats();
+  };
+
+  // Abrir modal de evento do calendário ao clicar em um dia
+  const handleDayClickForEvent = (date: Date, time?: string) => {
+    setEditingEvent(null);
+    setEventModalDate(date);
+    setEventModalEndDate(undefined);
+    setEventModalTime(time);
+    setIsEventModalOpen(true);
+  };
+
+  // Editar evento existente
+  const handleEditCalendarEvent = (event: CalendarEvent) => {
+    setEditingEvent(event);
+    setEventModalDate(undefined);
+    setEventModalEndDate(undefined);
+    setEventModalTime(undefined);
+    setIsEventModalOpen(true);
+  };
+
+  // Callback quando evento é criado/editado com sucesso
+  const handleEventSuccess = () => {
+    fetchCalendarEvents();
+  };
+
+  // Buscar eventos do calendário
+  const fetchCalendarEvents = async () => {
+    try {
+      let startDate: Date;
+      let endDate: Date;
+
+      if (viewMode === 'month') {
+        startDate = startOfMonth(currentDate);
+        endDate = endOfMonth(currentDate);
+      } else if (viewMode === 'week') {
+        startDate = startOfWeek(currentDate, { locale: ptBR });
+        endDate = endOfWeek(currentDate, { locale: ptBR });
+      } else {
+        startDate = startOfDay(currentDate);
+        endDate = endOfDay(currentDate);
+      }
+
+      const params = new URLSearchParams({
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+      });
+
+      const response = await fetch(`/api/calendar-events?${params}`);
+      if (response.ok) {
+        const data = await response.json();
+        setCalendarEvents(data);
+      }
+    } catch (error) {
+      console.error('Error fetching calendar events:', error);
+    }
+  };
+
+  // Obter eventos do calendário para um dia específico
+  const getCalendarEventsForDay = (day: Date) => {
+    return calendarEvents.filter((evt) => {
+      const start = parseISO(evt.startDate);
+      const end = parseISO(evt.endDate);
+      const dayStart = startOfDay(day);
+      const dayEnd = endOfDay(day);
+      return start <= dayEnd && end >= dayStart;
+    });
   };
 
   // Buscar agendamentos
@@ -197,6 +294,7 @@ export default function AgendaPage() {
   useEffect(() => {
     fetchAppointments();
     fetchMonthStats();
+    fetchCalendarEvents();
   }, [currentDate, viewMode]);
 
   // Navegação de período
@@ -324,25 +422,35 @@ export default function AgendaPage() {
         <div className="grid grid-cols-7">
           {days.map((day, index) => {
             const dayAppointments = getAppointmentsForDay(day);
+            const dayEvents = getCalendarEventsForDay(day);
+            const totalItems = dayAppointments.length + dayEvents.length;
             const isCurrentMonth = isSameMonth(day, currentDate);
             const isToday = isSameDay(day, new Date());
             const isSelected = isSameDay(day, selectedDate);
+
+            // Combine appointments and events for display
+            const allItems: Array<{ type: 'appointment' | 'event'; data: any }> = [
+              ...dayAppointments.map((apt) => ({ type: 'appointment' as const, data: apt })),
+              ...dayEvents.map((evt) => ({ type: 'event' as const, data: evt })),
+            ].sort((a, b) => {
+              const dateA = a.type === 'appointment' ? (a.data.scheduledDate || '') : a.data.startDate;
+              const dateB = b.type === 'appointment' ? (b.data.scheduledDate || '') : b.data.startDate;
+              return new Date(dateA).getTime() - new Date(dateB).getTime();
+            });
 
             return (
               <div
                 key={index}
                 onClick={() => {
                   setSelectedDate(day);
+                  handleDayClickForEvent(day);
                 }}
-                onDoubleClick={() => {
-                  handleSlotClick(day, '09:00');
-                }}
-                className={`min-h-[100px] p-2 border-b border-r border-gray-200 dark:border-gray-700 cursor-pointer transition-colors ${
+                className={`group min-h-[100px] p-2 border-b border-r border-gray-200 dark:border-gray-700 cursor-pointer transition-colors ${
                   !isCurrentMonth ? 'bg-gray-50 dark:bg-gray-800/50' : ''
                 } ${
                   isSelected ? 'bg-purple-50 dark:bg-purple-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800'
                 }`}
-                title="Clique duplo para criar agendamento"
+                title="Clique para criar evento"
               >
                 <div className="flex justify-between items-start mb-1">
                   <span
@@ -357,9 +465,9 @@ export default function AgendaPage() {
                     {format(day, 'd')}
                   </span>
                   <div className="flex items-center gap-1">
-                    {dayAppointments.length > 0 && (
+                    {totalItems > 0 && (
                       <Badge variant="secondary" className="text-xs">
-                        {dayAppointments.length}
+                        {totalItems}
                       </Badge>
                     )}
                     <button
@@ -375,24 +483,50 @@ export default function AgendaPage() {
                   </div>
                 </div>
 
-                {/* Lista de agendamentos do dia (máx 2 visíveis) */}
+                {/* Lista de items do dia (agendamentos + eventos) */}
                 <div className="space-y-1">
-                  {dayAppointments.slice(0, 2).map((apt) => (
-                    <div
-                      key={apt.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleEditAppointment(apt);
-                      }}
-                      style={getProcedureColorStyle(apt.procedure.color)}
-                      className={`text-xs p-1 rounded truncate ${!apt.procedure.color ? statusColors[apt.status] : ''} ${!apt.procedure.color && apt.appointmentType ? appointmentTypeColors[apt.appointmentType] : ''} cursor-pointer hover:opacity-80`}
-                    >
-                      {apt.scheduledDate && format(parseISO(apt.scheduledDate), 'HH:mm')} - {apt.sale.patient.name}
-                    </div>
-                  ))}
-                  {dayAppointments.length > 2 && (
+                  {allItems.slice(0, 3).map((item) => {
+                    if (item.type === 'appointment') {
+                      const apt = item.data as Appointment;
+                      return (
+                        <div
+                          key={`apt-${apt.id}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditAppointment(apt);
+                          }}
+                          style={getProcedureColorStyle(apt.procedure.color)}
+                          className={`text-xs p-1 rounded truncate ${!apt.procedure.color ? statusColors[apt.status] : ''} ${!apt.procedure.color && apt.appointmentType ? appointmentTypeColors[apt.appointmentType] : ''} cursor-pointer hover:opacity-80`}
+                        >
+                          {apt.scheduledDate && format(parseISO(apt.scheduledDate), 'HH:mm')} - {apt.sale.patient.name}
+                        </div>
+                      );
+                    } else {
+                      const evt = item.data as CalendarEvent;
+                      const tagColor = evt.tag?.color || '#8B5CF6';
+                      return (
+                        <div
+                          key={`evt-${evt.id}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditCalendarEvent(evt);
+                          }}
+                          className="text-xs p-1 rounded truncate cursor-pointer hover:opacity-80"
+                          style={{
+                            backgroundColor: `${tagColor}20`,
+                            borderLeft: `3px solid ${tagColor}`,
+                            color: tagColor,
+                          }}
+                          title={evt.description || evt.title}
+                        >
+                          {format(parseISO(evt.startDate), 'HH:mm')} {evt.title}
+                        </div>
+                      );
+                    }
+                  })}
+                  {allItems.length > 3 && (
                     <div className="text-xs text-gray-500 dark:text-gray-400 pl-1">
-                      +{dayAppointments.length - 2} mais
+                      +{allItems.length - 3} mais
                     </div>
                   )}
                 </div>
@@ -413,10 +547,15 @@ export default function AgendaPage() {
         <div className="grid grid-cols-7 gap-px bg-gray-200 dark:bg-gray-700">
           {days.map((day) => {
             const dayAppointments = getAppointmentsForDay(day);
+            const dayEvents = getCalendarEventsForDay(day);
             const isToday = isSameDay(day, new Date());
 
             return (
-              <div key={day.toISOString()} className="bg-white dark:bg-gray-900 min-h-[400px]">
+              <div
+                key={day.toISOString()}
+                className="bg-white dark:bg-gray-900 min-h-[400px] cursor-pointer"
+                onClick={() => handleDayClickForEvent(day)}
+              >
                 <div className={`p-3 border-b border-gray-200 dark:border-gray-700 ${
                   isToday ? 'bg-purple-50 dark:bg-purple-900/20' : ''
                 }`}>
@@ -435,7 +574,7 @@ export default function AgendaPage() {
                   {dayAppointments.map((apt) => (
                     <div
                       key={apt.id}
-                      onClick={() => handleEditAppointment(apt)}
+                      onClick={(e) => { e.stopPropagation(); handleEditAppointment(apt); }}
                       className={`p-2 rounded-lg cursor-pointer hover:opacity-80 ${statusColors[apt.status]} ${apt.appointmentType ? appointmentTypeColors[apt.appointmentType] : ''}`}
                     >
                       <div className="font-medium text-sm">
@@ -445,6 +584,33 @@ export default function AgendaPage() {
                       <div className="text-xs mt-1 opacity-75">{apt.procedure.name}</div>
                     </div>
                   ))}
+                  {dayEvents.map((evt) => {
+                    const tagColor = evt.tag?.color || '#8B5CF6';
+                    return (
+                      <div
+                        key={evt.id}
+                        onClick={(e) => { e.stopPropagation(); handleEditCalendarEvent(evt); }}
+                        className="p-2 rounded-lg cursor-pointer hover:opacity-80"
+                        style={{
+                          backgroundColor: `${tagColor}20`,
+                          borderLeft: `3px solid ${tagColor}`,
+                        }}
+                      >
+                        <div className="font-medium text-sm" style={{ color: tagColor }}>
+                          {format(parseISO(evt.startDate), 'HH:mm')}
+                        </div>
+                        <div className="text-xs mt-1 font-medium" style={{ color: tagColor }}>
+                          {evt.title}
+                        </div>
+                        {evt.tag && (
+                          <div className="text-xs mt-1 opacity-75 flex items-center gap-1">
+                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: tagColor }} />
+                            {evt.tag.name}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -457,25 +623,86 @@ export default function AgendaPage() {
   // Renderizar visualização diária
   const renderDayView = () => {
     const dayAppointments = getAppointmentsForDay(currentDate);
+    const dayEvents = getCalendarEventsForDay(currentDate);
 
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Agendamentos do Dia</CardTitle>
-          <CardDescription>
-            {format(currentDate, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Agendamentos do Dia</CardTitle>
+              <CardDescription>
+                {format(currentDate, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}
+              </CardDescription>
+            </div>
+            <Button
+              onClick={() => handleDayClickForEvent(currentDate)}
+              variant="outline"
+              size="sm"
+              className="text-purple-600"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Evento
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
-          {dayAppointments.length === 0 ? (
+          {dayAppointments.length === 0 && dayEvents.length === 0 ? (
             <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-              Nenhum agendamento para este dia
+              Nenhum agendamento ou evento para este dia
             </div>
           ) : (
             <div className="space-y-3">
+              {/* Calendar Events */}
+              {dayEvents.map((evt) => {
+                const tagColor = evt.tag?.color || '#8B5CF6';
+                return (
+                  <div
+                    key={`evt-${evt.id}`}
+                    onClick={() => handleEditCalendarEvent(evt)}
+                    className="flex items-start gap-4 p-4 rounded-lg border cursor-pointer transition-colors hover:opacity-90"
+                    style={{
+                      borderColor: `${tagColor}40`,
+                      backgroundColor: `${tagColor}10`,
+                      borderLeftWidth: '4px',
+                      borderLeftColor: tagColor,
+                    }}
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Clock className="h-4 w-4" style={{ color: tagColor }} />
+                        <span className="font-medium" style={{ color: tagColor }}>
+                          {format(parseISO(evt.startDate), 'HH:mm')} - {format(parseISO(evt.endDate), 'HH:mm')}
+                        </span>
+                      </div>
+                      <div className="font-medium text-gray-900 dark:text-gray-100">
+                        {evt.title}
+                      </div>
+                      {evt.description && (
+                        <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                          {evt.description}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {evt.tag && (
+                        <Badge
+                          className="text-white"
+                          style={{ backgroundColor: tagColor }}
+                        >
+                          {evt.tag.name}
+                        </Badge>
+                      )}
+                      <Badge variant="outline" className="text-xs">Evento</Badge>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Procedure Appointments */}
               {dayAppointments.map((apt) => (
                 <div
-                  key={apt.id}
+                  key={`apt-${apt.id}`}
                   onClick={() => handleEditAppointment(apt)}
                   className={`flex items-start gap-4 p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-600 cursor-pointer transition-colors ${apt.appointmentType ? appointmentTypeColors[apt.appointmentType] : ''}`}
                 >
@@ -530,13 +757,29 @@ export default function AgendaPage() {
             Gerencie seus agendamentos e acompanhe o comparecimento dos pacientes
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Link href="/agenda/futuros">
             <Button variant="outline">
               <ListFilter className="h-4 w-4 mr-2" />
               Ver Futuros
             </Button>
           </Link>
+          <Button
+            onClick={() => setIsTagManagerOpen(true)}
+            variant="outline"
+            className="border-purple-200 text-purple-600 hover:bg-purple-50"
+          >
+            <TagIcon className="h-4 w-4 mr-2" />
+            Tags
+          </Button>
+          <Button
+            onClick={() => handleDayClickForEvent(new Date())}
+            variant="outline"
+            className="border-purple-200 text-purple-600 hover:bg-purple-50"
+          >
+            <CalendarPlus className="h-4 w-4 mr-2" />
+            Novo Evento
+          </Button>
           <Button 
             onClick={() => handleSlotClick(new Date())} 
             className="bg-purple-600 hover:bg-purple-700"
@@ -880,6 +1123,27 @@ export default function AgendaPage() {
         onSuccess={handleAppointmentCreated}
         preselectedDate={createModalDate}
         preselectedTime={createModalTime}
+      />
+
+      {/* Modal de Evento do Calendário */}
+      <CalendarEventModal
+        isOpen={isEventModalOpen}
+        onClose={() => {
+          setIsEventModalOpen(false);
+          setEditingEvent(null);
+        }}
+        onSuccess={handleEventSuccess}
+        preselectedDate={eventModalDate}
+        preselectedEndDate={eventModalEndDate}
+        preselectedTime={eventModalTime}
+        editingEvent={editingEvent}
+      />
+
+      {/* Gerenciador de Tags */}
+      <TagManager
+        isOpen={isTagManagerOpen}
+        onClose={() => setIsTagManagerOpen(false)}
+        onTagsChanged={fetchCalendarEvents}
       />
     </div>
   );

@@ -68,6 +68,7 @@ model User {
   sessions        Session[]
   ownedWorkspaces Workspace[] @relation("WorkspaceOwner")
   workspace       Workspace?  @relation("WorkspaceMembers", fields: [workspaceId], references: [id], onDelete: SetNull)
+  calendarEvents  CalendarEvent[] @relation("CalendarEventCreator")
   
   @@index([workspaceId])
 }
@@ -102,6 +103,8 @@ model Workspace {
   packages      Package[]
   cardFeeRules  CardFeeRule[]
   quotes        Quote[]
+  tags          Tag[]
+  calendarEvents CalendarEvent[]
 }
 
 // Supply model - Insumos da clínica
@@ -601,6 +604,43 @@ model QuoteItem {
   @@index([procedureId])
 }
 
+
+// Tag model - Tags para eventos do calendário
+model Tag {
+  id          String   @id @default(cuid())
+  name        String
+  color       String   // hex color like #FF5733
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  events      CalendarEvent[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+// CalendarEvent model - Eventos personalizados do calendário
+model CalendarEvent {
+  id          String   @id @default(cuid())
+  title       String
+  description String?  @db.Text
+  startDate   DateTime
+  endDate     DateTime
+  tagId       String?
+  tag         Tag?     @relation(fields: [tagId], references: [id], onDelete: SetNull)
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User     @relation("CalendarEventCreator", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([tagId])
+}
 
 // WorkspaceSettings - Configurações da clínica/workspace
 model WorkspaceSettings {
