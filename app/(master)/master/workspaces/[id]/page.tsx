@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Building2, Users, DollarSign, TrendingUp, Package, Stethoscope } from 'lucide-react';
+import { ArrowLeft, Building2, Users, DollarSign, TrendingUp, Package, Stethoscope, LogIn } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 
 interface WorkspaceDetails {
@@ -93,6 +93,28 @@ export default function WorkspaceDetailsPage() {
     }
   };
 
+  const impersonateWorkspace = async () => {
+    try {
+      const response = await fetch('/api/master/impersonate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ workspaceId }),
+      });
+
+      if (response.ok) {
+        // Redirecionar para o dashboard
+        window.location.href = '/dashboard';
+      } else {
+        const error = await response.json();
+        console.error('Error impersonating workspace:', error);
+      }
+    } catch (error) {
+      console.error('Error impersonating workspace:', error);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'ACTIVE':
@@ -159,14 +181,25 @@ export default function WorkspaceDetailsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="sm" onClick={() => router.back()}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{workspace.name}</h1>
-          <p className="text-gray-600 dark:text-gray-400">Detalhes do workspace</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="sm" onClick={() => router.back()}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{workspace.name}</h1>
+            <p className="text-gray-600 dark:text-gray-400">Detalhes do workspace</p>
+          </div>
         </div>
+        {workspace.status === 'ACTIVE' && (
+          <Button 
+            onClick={impersonateWorkspace}
+            className="bg-purple-600 hover:bg-purple-700 text-white"
+          >
+            <LogIn className="h-4 w-4 mr-2" />
+            Entrar neste Workspace
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

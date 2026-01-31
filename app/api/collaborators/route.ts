@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { getUserWorkspace } from '@/lib/workspace';
+import { getEffectiveWorkspace } from '@/lib/get-workspace-id';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    const workspace = await getUserWorkspace((session.user as any).id);
+    const workspace = await getEffectiveWorkspace();
     if (!workspace) {
       return NextResponse.json({ error: 'Workspace não encontrado' }, { status: 404 });
     }
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    const workspace = await getUserWorkspace((session.user as any).id);
+    const workspace = await getEffectiveWorkspace();
     if (!workspace) {
       return NextResponse.json({ error: 'Workspace não encontrado' }, { status: 404 });
     }

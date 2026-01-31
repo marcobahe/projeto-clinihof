@@ -21,7 +21,8 @@ import {
   Eye,
   Play,
   Pause,
-  Plus
+  Plus,
+  LogIn
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -119,6 +120,28 @@ export default function WorkspacesPage() {
       }
     } catch (error) {
       console.error('Error updating workspace status:', error);
+    }
+  };
+
+  const impersonateWorkspace = async (workspaceId: string) => {
+    try {
+      const response = await fetch('/api/master/impersonate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ workspaceId }),
+      });
+
+      if (response.ok) {
+        // Redirecionar para o dashboard
+        window.location.href = '/dashboard';
+      } else {
+        const error = await response.json();
+        console.error('Error impersonating workspace:', error);
+      }
+    } catch (error) {
+      console.error('Error impersonating workspace:', error);
     }
   };
 
@@ -258,8 +281,19 @@ export default function WorkspacesPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end space-x-2">
+                            {workspace.status === 'ACTIVE' && (
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => impersonateWorkspace(workspace.id)}
+                                className="text-purple-600 hover:text-purple-800 hover:bg-purple-50"
+                                title="Entrar neste workspace"
+                              >
+                                <LogIn className="h-4 w-4" />
+                              </Button>
+                            )}
                             <Link href={`/master/workspaces/${workspace.id}`}>
-                              <Button variant="ghost" size="sm">
+                              <Button variant="ghost" size="sm" title="Visualizar detalhes">
                                 <Eye className="h-4 w-4" />
                               </Button>
                             </Link>
@@ -269,6 +303,7 @@ export default function WorkspacesPage() {
                                 size="sm"
                                 onClick={() => updateWorkspaceStatus(workspace.id, 'SUSPENDED')}
                                 className="text-yellow-600 hover:text-yellow-800 hover:bg-yellow-50"
+                                title="Suspender workspace"
                               >
                                 <Pause className="h-4 w-4" />
                               </Button>
@@ -278,6 +313,7 @@ export default function WorkspacesPage() {
                                 size="sm"
                                 onClick={() => updateWorkspaceStatus(workspace.id, 'ACTIVE')}
                                 className="text-green-600 hover:text-green-800 hover:bg-green-50"
+                                title="Ativar workspace"
                               >
                                 <Play className="h-4 w-4" />
                               </Button>
