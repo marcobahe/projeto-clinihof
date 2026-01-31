@@ -6,56 +6,31 @@ import { signOut, useSession } from 'next-auth/react';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
-  Calendar,
-  CalendarDays,
   Users,
-  Stethoscope,
-  UserCircle,
-  LogOut,
-  Loader2,
-  Package,
-  UsersRound,
-  DollarSign,
-  Tag,
-  TrendingUp,
-  X,
-  FileText,
+  Building2,
   Settings,
-  Shield,
-  Percent,
+  LogOut,
+  X,
+  ArrowLeft,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { ThemeToggle } from './theme-toggle';
 import { useEffect, useState } from 'react';
 
-const navigation = [
-  { name: 'Painel', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Atendimentos', href: '/appointments', icon: Calendar },
-  { name: 'Agenda', href: '/agenda', icon: CalendarDays },
-  { name: 'Agendamentos Futuros', href: '/agenda/futuros', icon: CalendarDays },
-  { name: 'Pacientes', href: '/patients', icon: Users },
-  { name: 'Orçamentos', href: '/quotes', icon: FileText },
-  { name: 'Comissões', href: '/comissoes', icon: Percent },
-  { name: 'Custos', href: '/costs', icon: DollarSign },
-  { name: 'Fluxo de Caixa', href: '/cashflow', icon: TrendingUp },
-  { name: 'Insumos', href: '/supplies', icon: Package },
-  { name: 'Colaboradores', href: '/collaborators', icon: UsersRound },
-  { name: 'Procedimentos', href: '/procedures', icon: Stethoscope },
-  { name: 'Precificação (Pacotes)', href: '/packages', icon: Tag },
-  { name: 'Sessões de Pacotes', href: '/pacotes-sessoes', icon: Package },
-  { name: 'Configurações', href: '/configuracoes', icon: Settings },
-  { name: 'Usuários', href: '/usuarios', icon: Shield },
-  { name: 'Administração', href: '/admin', icon: Settings },
-  { name: 'Minha Conta', href: '/account', icon: UserCircle },
+const masterNavigation = [
+  { name: 'Dashboard', href: '/master', icon: LayoutDashboard },
+  { name: 'Workspaces', href: '/master/workspaces', icon: Building2 },
+  { name: 'Usuários', href: '/master/users', icon: Users },
+  { name: 'Configurações', href: '/master/settings', icon: Settings },
 ];
 
-interface SidebarProps {
+interface MasterSidebarProps {
   isOpen?: boolean;
   onClose?: () => void;
 }
 
-export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
+export function MasterSidebar({ isOpen = true, onClose }: MasterSidebarProps) {
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
 
@@ -79,12 +54,12 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
     return (
       <div className="hidden lg:flex h-screen w-64 flex-col bg-gradient-to-b from-gray-900 to-gray-800 dark:from-gray-950 dark:to-gray-900 text-white">
         <div className="flex h-16 items-center px-6 border-b border-gray-700 dark:border-gray-800">
-          <Link href="/dashboard" className="text-2xl font-bold text-purple-400 hover:text-purple-300 transition-colors cursor-pointer">
-            CliniHOF
-          </Link>
+          <div className="text-2xl font-bold text-purple-400">
+            CliniHOF Master
+          </div>
         </div>
         <nav className="flex-1 space-y-1 px-3 py-4">
-          {navigation.map((item) => (
+          {masterNavigation.map((item) => (
             <div
               key={item.name}
               className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-300"
@@ -118,12 +93,12 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       )}
 
       {/* Sidebar */}
-      <SidebarContent pathname={pathname} isOpen={isOpen} onClose={onClose} />
+      <MasterSidebarContent pathname={pathname} isOpen={isOpen} onClose={onClose} />
     </>
   );
 }
 
-function SidebarContent({ 
+function MasterSidebarContent({ 
   pathname, 
   isOpen, 
   onClose 
@@ -139,7 +114,7 @@ function SidebarContent({
     ?.split(' ')
     ?.map((n) => n?.[0])
     ?.join('')
-    ?.toUpperCase() ?? 'U';
+    ?.toUpperCase() ?? 'M';
 
   return (
     <div 
@@ -150,9 +125,14 @@ function SidebarContent({
     >
       {/* Logo */}
       <div className="flex h-16 items-center justify-between px-6 border-b border-gray-700 dark:border-gray-800">
-        <Link href="/dashboard" className="text-2xl font-bold text-purple-400 hover:text-purple-300 transition-colors cursor-pointer">
-          CliniHOF
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/master" className="text-xl font-bold text-purple-400 hover:text-purple-300 transition-colors cursor-pointer">
+            CliniHOF
+          </Link>
+          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-600 text-white">
+            Master
+          </span>
+        </div>
         {/* Close button for mobile */}
         <button
           onClick={onClose}
@@ -163,27 +143,25 @@ function SidebarContent({
         </button>
       </div>
 
-      {/* Master Panel Link */}
-      {user?.role === 'MASTER' && (
-        <div className="px-3 pt-4 pb-2">
-          <Link
-            href="/master"
-            onClick={() => {
-              if (window.innerWidth < 1024) {
-                onClose?.();
-              }
-            }}
-            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-purple-300 hover:bg-gray-700/50 hover:text-purple-200 transition-all"
-          >
-            <Shield className="h-4 w-4" />
-            <span>Painel Master</span>
-          </Link>
-        </div>
-      )}
+      {/* Navigation to regular dashboard */}
+      <div className="px-3 pt-4 pb-2">
+        <Link
+          href="/dashboard"
+          onClick={() => {
+            if (window.innerWidth < 1024) {
+              onClose?.();
+            }
+          }}
+          className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-blue-300 hover:bg-gray-700/50 hover:text-blue-200 transition-all"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <span>Voltar ao Painel Clínica</span>
+        </Link>
+      </div>
 
       {/* Navigation */}
       <nav className="flex-1 space-y-1 px-3 py-2 overflow-y-auto">
-        {navigation.map((item) => {
+        {masterNavigation.map((item) => {
           const isActive = pathname === item.href;
           return (
             <Link
@@ -226,7 +204,7 @@ function SidebarContent({
           </Avatar>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">
-              {user?.name ?? 'Usuário'}
+              {user?.name ?? 'Master'}
             </p>
             <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
               {user?.email ?? ''}

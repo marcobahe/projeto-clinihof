@@ -38,10 +38,17 @@ model Session {
 
 // User roles for access control
 enum UserRole {
+  MASTER        // Platform owner - access to all workspaces and system management
   ADMIN         // Full access to everything
   MANAGER       // Access to reports, sales, appointments, patients (no system settings)
   USER          // Access to appointments, patients, own sales
   RECEPTIONIST  // Access to appointments, patients (read-only on financial data)
+}
+
+enum WorkspaceStatus {
+  ACTIVE
+  SUSPENDED
+  CANCELLED
 }
 
 model User {
@@ -71,11 +78,14 @@ model VerificationToken {
 
 // Multi-tenant workspace model
 model Workspace {
-  id          String   @id @default(cuid())
-  name        String   // Clinic name
+  id          String          @id @default(cuid())
+  name        String          // Clinic name
   ownerId     String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  status      WorkspaceStatus @default(ACTIVE)
+  plan        String          @default("free") // free, pro, enterprise
+  maxUsers    Int             @default(5)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
   
   owner         User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   patients      Patient[]
