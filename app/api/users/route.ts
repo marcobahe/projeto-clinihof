@@ -20,10 +20,10 @@ export async function GET(req: NextRequest) {
       select: { id: true, role: true },
     });
 
-    if (!currentUser || currentUser.role !== 'ADMIN') {
+    if (!currentUser) {
       return NextResponse.json(
-        { error: 'Acesso negado. Apenas administradores podem acessar.' },
-        { status: 403 }
+        { error: 'Usuário não encontrado' },
+        { status: 404 }
       );
     }
 
@@ -31,6 +31,14 @@ export async function GET(req: NextRequest) {
 
     if (!workspace) {
       return NextResponse.json({ error: 'Workspace não encontrado' }, { status: 404 });
+    }
+
+    // Allow access if user is ADMIN or workspace owner
+    if (currentUser.role !== 'ADMIN' && currentUser.id !== workspace.ownerId) {
+      return NextResponse.json(
+        { error: 'Acesso negado. Apenas administradores ou donos do workspace podem acessar.' },
+        { status: 403 }
+      );
     }
 
     // Get all users in the same workspace

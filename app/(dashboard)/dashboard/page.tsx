@@ -142,10 +142,10 @@ export default function DashboardPage() {
   }, [status, router]);
 
   useEffect(() => {
-    if (session) {
+    if (session && period !== 'custom') {
       fetchStats();
     }
-  }, [session, period, dateRange]);
+  }, [session, period]);
 
   const fetchStats = async () => {
     try {
@@ -295,8 +295,13 @@ export default function DashboardPage() {
                 }}
               />
               <Button 
-                onClick={fetchStats}
-                className="bg-purple-600 hover:bg-purple-700"
+                onClick={() => {
+                  if (dateRange?.from && dateRange?.to) {
+                    fetchStats();
+                  }
+                }}
+                disabled={!dateRange?.from || !dateRange?.to}
+                className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Aplicar
               </Button>

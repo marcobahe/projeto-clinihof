@@ -47,3 +47,45 @@ export function formatCurrency(value: number): string {
 export function formatPercent(value: number, decimals: number = 1): string {
   return `${formatNumber(value, decimals)}%`;
 }
+
+/**
+ * Formata datas no padrão brasileiro (DD/MM/AAAA)
+ * @param date - Data a ser formatada (Date object ou string)
+ * @returns String formatada como DD/MM/AAAA
+ */
+export function formatDate(date: Date | string): string {
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  
+  // Check if date is valid
+  if (isNaN(dateObj.getTime())) {
+    return '';
+  }
+  
+  return dateObj.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
+
+/**
+ * Formata datas e horários no padrão brasileiro (DD/MM/AAAA HH:mm)
+ * @param date - Data a ser formatada (Date object ou string)
+ * @returns String formatada como DD/MM/AAAA HH:mm
+ */
+export function formatDateTime(date: Date | string): string {
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  
+  // Check if date is valid
+  if (isNaN(dateObj.getTime())) {
+    return '';
+  }
+  
+  return dateObj.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}

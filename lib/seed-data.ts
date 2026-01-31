@@ -424,12 +424,17 @@ export async function createExampleData(
   // ========== CREATE SALES WITH SESSIONS ==========
   const now = new Date();
   
+  // Helper function to get random seller ID
+  const collaboratorIds = Object.values(createdCollaborators).map(c => c.id);
+  const getRandomSellerId = () => collaboratorIds[Math.floor(Math.random() * collaboratorIds.length)];
+  
   // Sale 1: Ana Costa - Pacote de Limpeza de Pele (1 sessão realizada de 8)
   if (createdPatients[2] && createdProcedures[0]) {
     const sale1 = await prisma.sale.create({
       data: {
         workspaceId,
         patientId: createdPatients[2].id,
+        sellerId: getRandomSellerId(),
         saleDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30),
         totalAmount: 1200.0,
         paymentMethod: 'CASH_PIX',
@@ -448,13 +453,24 @@ export async function createExampleData(
       },
     });
 
+    // Helper function to generate realistic time
+    const getRandomTime = () => {
+      const hours = 8 + Math.floor(Math.random() * 10); // 8-17h
+      const minutes = Math.random() < 0.5 ? 0 : 30; // :00 or :30
+      return { hours, minutes };
+    };
+
     // Create 8 sessions - 1 completed, 7 pending
+    const { hours: h1, minutes: m1 } = getRandomTime();
+    const scheduledDate1 = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 25);
+    scheduledDate1.setHours(h1, m1, 0, 0);
+    
     await prisma.procedureSession.create({
       data: {
         saleId: sale1.id,
         procedureId: createdProcedures[0].id,
-        scheduledDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 25),
-        completedDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 25),
+        scheduledDate: scheduledDate1,
+        completedDate: scheduledDate1,
         status: 'COMPLETED',
         notes: 'Primeira sessão realizada',
       },
@@ -477,6 +493,7 @@ export async function createExampleData(
       data: {
         workspaceId,
         patientId: createdPatients[3].id,
+        sellerId: getRandomSellerId(),
         saleDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 15),
         totalAmount: 280.0,
         paymentMethod: 'CASH_PIX',
@@ -494,12 +511,16 @@ export async function createExampleData(
       },
     });
 
+    const { hours: h2, minutes: m2 } = getRandomTime();
+    const scheduledDate2 = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 10);
+    scheduledDate2.setHours(h2, m2, 0, 0);
+    
     await prisma.procedureSession.create({
       data: {
         saleId: sale2.id,
         procedureId: createdProcedures[1].id,
-        scheduledDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 10),
-        completedDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 10),
+        scheduledDate: scheduledDate2,
+        completedDate: scheduledDate2,
         status: 'COMPLETED',
       },
     });
@@ -511,6 +532,7 @@ export async function createExampleData(
       data: {
         workspaceId,
         patientId: createdPatients[2].id,
+        sellerId: getRandomSellerId(),
         saleDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 5),
         totalAmount: 600.0,
         paymentMethod: 'CREDIT_CARD',
@@ -547,6 +569,7 @@ export async function createExampleData(
       data: {
         workspaceId,
         patientId: createdPatients[0].id,
+        sellerId: getRandomSellerId(),
         saleDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2),
         totalAmount: 540.0,
         paymentMethod: 'CASH_PIX',
@@ -582,6 +605,7 @@ export async function createExampleData(
       data: {
         workspaceId,
         patientId: createdPatients[0].id,
+        sellerId: getRandomSellerId(),
         saleDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 60),
         totalAmount: 2000.0,
         paymentMethod: 'CREDIT_CARD',
@@ -604,22 +628,30 @@ export async function createExampleData(
       },
     });
 
+    const { hours: h5a, minutes: m5a } = getRandomTime();
+    const scheduledDate5a = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 55);
+    scheduledDate5a.setHours(h5a, m5a, 0, 0);
+    
     await prisma.procedureSession.create({
       data: {
         saleId: sale5.id,
         procedureId: createdProcedures[3].id,
-        scheduledDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 55),
-        completedDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 55),
+        scheduledDate: scheduledDate5a,
+        completedDate: scheduledDate5a,
         status: 'COMPLETED',
       },
     });
 
+    const { hours: h5b, minutes: m5b } = getRandomTime();
+    const scheduledDate5b = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 55);
+    scheduledDate5b.setHours(h5b, m5b, 0, 0);
+    
     await prisma.procedureSession.create({
       data: {
         saleId: sale5.id,
         procedureId: createdProcedures[4].id,
-        scheduledDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 55),
-        completedDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 55),
+        scheduledDate: scheduledDate5b,
+        completedDate: scheduledDate5b,
         status: 'COMPLETED',
       },
     });
@@ -631,6 +663,7 @@ export async function createExampleData(
       data: {
         workspaceId,
         patientId: createdPatients[1].id,
+        sellerId: getRandomSellerId(),
         saleDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 45),
         totalAmount: 2500.0,
         paymentMethod: 'BANK_SLIP',
@@ -648,18 +681,188 @@ export async function createExampleData(
       },
     });
 
+    const { hours: h6, minutes: m6 } = getRandomTime();
+    const scheduledDate6 = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 40);
+    scheduledDate6.setHours(h6, m6, 0, 0);
+    
     await prisma.procedureSession.create({
       data: {
         saleId: sale6.id,
         procedureId: createdProcedures[5].id,
-        scheduledDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 40),
-        completedDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 40),
+        scheduledDate: scheduledDate6,
+        completedDate: scheduledDate6,
         status: 'COMPLETED',
       },
     });
   }
 
-  console.log('Created 6 sales with sessions');
+  // ========== CREATE FUTURE SESSIONS ==========
+  // Add some future sessions with realistic times
+  
+  // Future session 1: Maria Silva - Limpeza de Pele (agendamento futuro)
+  if (createdPatients[0] && createdProcedures[0]) {
+    const { hours: hf1, minutes: mf1 } = getRandomTime();
+    const futureDate1 = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 5);
+    futureDate1.setHours(hf1, mf1, 0, 0);
+    
+    const futureSale1 = await prisma.sale.create({
+      data: {
+        workspaceId,
+        patientId: createdPatients[0].id,
+        sellerId: getRandomSellerId(),
+        saleDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1),
+        totalAmount: 150.0,
+        paymentMethod: 'CASH_PIX',
+        installments: 1,
+        paymentStatus: 'PAID',
+        notes: 'Agendamento futuro - limpeza de pele',
+        items: {
+          create: [
+            {
+              procedureId: createdProcedures[0].id,
+              quantity: 1,
+              unitPrice: 150.0,
+            },
+          ],
+        },
+      },
+    });
+
+    await prisma.procedureSession.create({
+      data: {
+        saleId: futureSale1.id,
+        procedureId: createdProcedures[0].id,
+        scheduledDate: futureDate1,
+        status: 'PENDING',
+        notes: 'Sessão agendada para próxima semana',
+      },
+    });
+  }
+
+  // Future session 2: João Santos - Microagulhamento (agendamento futuro)
+  if (createdPatients[1] && createdProcedures[2]) {
+    const { hours: hf2, minutes: mf2 } = getRandomTime();
+    const futureDate2 = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 12);
+    futureDate2.setHours(hf2, mf2, 0, 0);
+    
+    const futureSale2 = await prisma.sale.create({
+      data: {
+        workspaceId,
+        patientId: createdPatients[1].id,
+        sellerId: getRandomSellerId(),
+        saleDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 3),
+        totalAmount: 350.0,
+        paymentMethod: 'CREDIT_CARD',
+        installments: 2,
+        paymentStatus: 'PARTIAL',
+        notes: 'Microagulhamento - sessão única',
+        items: {
+          create: [
+            {
+              procedureId: createdProcedures[2].id,
+              quantity: 1,
+              unitPrice: 350.0,
+            },
+          ],
+        },
+      },
+    });
+
+    await prisma.procedureSession.create({
+      data: {
+        saleId: futureSale2.id,
+        procedureId: createdProcedures[2].id,
+        scheduledDate: futureDate2,
+        status: 'PENDING',
+        notes: 'Primeira sessão de microagulhamento',
+      },
+    });
+  }
+
+  // Future session 3: Carla Mendes - Drenagem Linfática (3 sessões futuras)
+  if (createdPatients[4] && createdProcedures[7]) {
+    const futureSale3 = await prisma.sale.create({
+      data: {
+        workspaceId,
+        patientId: createdPatients[4].id,
+        sellerId: getRandomSellerId(),
+        saleDate: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+        totalAmount: 540.0,
+        paymentMethod: 'CASH_PIX',
+        installments: 1,
+        paymentStatus: 'PAID',
+        notes: 'Pacote 3 sessões drenagem - todas futuras',
+        items: {
+          create: [
+            {
+              procedureId: createdProcedures[7].id,
+              quantity: 3,
+              unitPrice: 180.0,
+            },
+          ],
+        },
+      },
+    });
+
+    // Create 3 future sessions at different dates
+    for (let i = 0; i < 3; i++) {
+      const { hours: hf, minutes: mf } = getRandomTime();
+      const futureDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7 + (i * 7));
+      futureDate.setHours(hf, mf, 0, 0);
+      
+      await prisma.procedureSession.create({
+        data: {
+          saleId: futureSale3.id,
+          procedureId: createdProcedures[7].id,
+          scheduledDate: futureDate,
+          status: 'PENDING',
+          notes: `Sessão ${i + 1} de drenagem linfática`,
+        },
+      });
+    }
+  }
+
+  // Future session 4: Pedro Oliveira - Harmonização Facial (agendamento futuro VIP)
+  if (createdPatients[3] && createdProcedures[5]) {
+    const { hours: hf4, minutes: mf4 } = getRandomTime();
+    const futureDate4 = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 20);
+    futureDate4.setHours(hf4, mf4, 0, 0);
+    
+    const futureSale4 = await prisma.sale.create({
+      data: {
+        workspaceId,
+        patientId: createdPatients[3].id,
+        sellerId: getRandomSellerId(),
+        saleDate: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2),
+        totalAmount: 2500.0,
+        paymentMethod: 'BANK_SLIP',
+        installments: 1,
+        paymentStatus: 'PENDING',
+        notes: 'Harmonização facial - agendamento especial',
+        items: {
+          create: [
+            {
+              procedureId: createdProcedures[5].id,
+              quantity: 1,
+              unitPrice: 2500.0,
+            },
+          ],
+        },
+      },
+    });
+
+    await prisma.procedureSession.create({
+      data: {
+        saleId: futureSale4.id,
+        procedureId: createdProcedures[5].id,
+        scheduledDate: futureDate4,
+        status: 'PENDING',
+        notes: 'Harmonização facial completa',
+      },
+    });
+  }
+
+  console.log('Created 6 original sales + 4 future sales with sessions');
 
   // ========== CREATE PACKAGES (PACOTES) ==========
   const packagesData = [

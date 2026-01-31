@@ -96,11 +96,11 @@ interface CashFlowData {
 }
 
 // Animated currency component
-function AnimatedCurrency({ value, prefix = 'R$' }: { value: number; prefix?: string }) {
+function AnimatedCurrency({ value }: { value: number }) {
   const animatedValue = useCountUp(value, 2000);
   return (
     <span>
-      {prefix} {formatCurrency(animatedValue)}
+      {formatCurrency(animatedValue)}
     </span>
   );
 }
@@ -455,7 +455,7 @@ export default function CashFlowPage() {
                     <YAxis />
                     <Tooltip
                       formatter={(value: number) =>
-                        `R$ ${formatCurrency(value)}`
+                        formatCurrency(value)
                       }
                     />
                     <Legend />
@@ -509,7 +509,7 @@ export default function CashFlowPage() {
                     <YAxis />
                     <Tooltip
                       formatter={(value: number) =>
-                        `R$ ${formatCurrency(value)}`
+                        formatCurrency(value)
                       }
                     />
                     <Legend />
@@ -550,7 +550,7 @@ export default function CashFlowPage() {
                       </Pie>
                       <Tooltip
                         formatter={(value: number) =>
-                          `R$ ${formatCurrency(value)}`
+                          formatCurrency(value)
                         }
                       />
                     </PieChart>
@@ -682,7 +682,7 @@ export default function CashFlowPage() {
                           </Pie>
                           <Tooltip
                             formatter={(value: number) =>
-                              `R$ ${formatCurrency(value)}`
+                              formatCurrency(value)
                             }
                           />
                           <Legend />
@@ -719,7 +719,7 @@ export default function CashFlowPage() {
                           <YAxis dataKey="method" type="category" width={120} />
                           <Tooltip
                             formatter={(value: number) =>
-                              `R$ ${formatCurrency(value)}`
+                              formatCurrency(value)
                             }
                           />
                           <Legend />
@@ -774,15 +774,12 @@ export default function CashFlowPage() {
                                   {method}
                                 </td>
                                 <td className="px-4 py-3 text-right text-green-700 dark:text-green-400">
-                                  R${' '}
                                   {formatCurrency(values.cash)}
                                 </td>
                                 <td className="px-4 py-3 text-right text-blue-700 dark:text-blue-400">
-                                  R${' '}
                                   {formatCurrency(values.installment)}
                                 </td>
                                 <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-gray-100">
-                                  R${' '}
                                   {formatCurrency(values.total)}
                                 </td>
                                 <td className="px-4 py-3 text-right text-gray-600 dark:text-gray-400">
@@ -797,15 +794,12 @@ export default function CashFlowPage() {
                         <tr>
                           <td className="px-4 py-3 text-gray-900 dark:text-gray-100">Total</td>
                           <td className="px-4 py-3 text-right text-green-700 dark:text-green-400">
-                            R${' '}
                             {formatCurrency(data.paymentAnalysis.cashPayments.amount)}
                           </td>
                           <td className="px-4 py-3 text-right text-blue-700 dark:text-blue-400">
-                            R${' '}
                             {formatCurrency(data.paymentAnalysis.installmentPayments.amount)}
                           </td>
                           <td className="px-4 py-3 text-right text-gray-900 dark:text-gray-100">
-                            R${' '}
                             {formatCurrency(data.paymentAnalysis.totalPayments)}
                           </td>
                           <td className="px-4 py-3 text-right text-gray-600 dark:text-gray-400">
@@ -872,7 +866,6 @@ export default function CashFlowPage() {
                               )}
                             </td>
                             <td className="px-3 py-2 text-right font-medium text-green-700">
-                              R${' '}
                               {formatCurrency(item.amount)}
                             </td>
                           </tr>
@@ -884,7 +877,6 @@ export default function CashFlowPage() {
                             Total
                           </td>
                           <td className="px-3 py-2 text-right font-bold text-green-700">
-                            R${' '}
                             {formatCurrency(data.summary.totalReceivables)}
                           </td>
                         </tr>
@@ -942,7 +934,6 @@ export default function CashFlowPage() {
                               {item.customCategory || item.category}
                             </td>
                             <td className="px-3 py-2 text-right font-medium text-red-700">
-                              R${' '}
                               {formatCurrency(item.amount)}
                             </td>
                           </tr>
@@ -954,7 +945,6 @@ export default function CashFlowPage() {
                             Total
                           </td>
                           <td className="px-3 py-2 text-right font-bold text-red-700">
-                            R${' '}
                             {formatCurrency(data.summary.totalExpenses)}
                           </td>
                         </tr>
@@ -980,19 +970,14 @@ export default function CashFlowPage() {
                 <div className="bg-white dark:bg-gray-900 p-4 rounded-lg">
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Média Diária de Recebíveis</p>
                   <p className="text-xl font-bold text-purple-700">
-                    R${' '}
-                    {
-                      formatCurrency(data.summary.totalReceivables / data.dailyCashFlow.length)
-                    }
+                    {formatCurrency(data.summary.totalReceivables / data.dailyCashFlow.length)}
                   </p>
                 </div>
                 <div className="bg-white dark:bg-gray-900 p-4 rounded-lg">
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Média Diária de Despesas</p>
                   <p className="text-xl font-bold text-purple-700">
-                    R${' '}
-                    {
-                      formatCurrency(data.summary.totalExpenses / data.dailyCashFlow.length)
-                    }
+                    {formatCurrency(data.summary.totalExpenses / data.dailyCashFlow.length)}
+                  </p>
                   </p>
                 </div>
                 <div className="bg-white dark:bg-gray-900 p-4 rounded-lg">

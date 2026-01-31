@@ -167,7 +167,19 @@ export async function GET(request: NextRequest) {
     });
 
     // Transform costs into expense items
-    const expenses: ExpenseItem[] = costs.map((cost) => {
+    // Use a Set to track processed recurring costs to avoid duplicates
+    const processedCosts = new Set<string>();
+    const expenses: ExpenseItem[] = [];
+
+    costs.forEach((cost) => {
+      // For recurring costs without payment date, ensure they appear only once per period
+      if (cost.isRecurring && !cost.paymentDate) {
+        if (processedCosts.has(cost.id)) {
+          return; // Skip if already processed
+        }
+        processedCosts.add(cost.id);
+      }
+
       // If no payment date, use start of period for display
       const displayDate = cost.paymentDate || startDate;
       
@@ -181,7 +193,7 @@ export async function GET(request: NextRequest) {
         amount = 0; // Will be calculated separately if needed
       }
 
-      return {
+      expenses.push({
         id: cost.id,
         date: displayDate,
         amount,
@@ -189,7 +201,7 @@ export async function GET(request: NextRequest) {
         category: formatCostCategory(cost.category),
         customCategory: cost.customCategory,
         isRecurring: cost.isRecurring,
-      };
+      });
     });
 
     // Add cost installments to expenses

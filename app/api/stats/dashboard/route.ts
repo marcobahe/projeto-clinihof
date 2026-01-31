@@ -131,9 +131,12 @@ export async function GET(req: NextRequest) {
       });
     });
 
-    // For taxes and fees, we'll estimate 15% of gross revenue as a placeholder
-    // In a real app, this would come from a separate taxes/fees table
-    const estimatedTaxes = grossRevenue * 0.15;
+    // TODO: Make tax rate configurable in workspace settings
+    // Currently using 15% as default but should be configurable
+    // Check if workspace has custom tax settings, otherwise use default 15%
+    const defaultTaxRate = 0.15; // 15% default rate
+    // In future: const taxRate = workspace.settings?.taxRate || defaultTaxRate;
+    const estimatedTaxes = grossRevenue * defaultTaxRate;
 
     // Calculate net revenue (faturamento líquido)
     const netRevenue = grossRevenue - totalSupplyCosts - totalLaborCosts - estimatedTaxes;
