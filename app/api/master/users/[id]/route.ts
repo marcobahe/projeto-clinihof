@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getMasterSession, withMasterAuth } from '@/lib/master-auth'
-import { prisma } from '@/lib/prisma'
+import { prisma } from '@/lib/db'
 import { UserRole } from '@prisma/client'
 
 interface RouteParams {

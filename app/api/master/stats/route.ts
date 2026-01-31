@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getMasterSession, withMasterAuth } from '@/lib/master-auth'
-import { prisma } from '@/lib/prisma'
+import { prisma } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   // Check if user has master auth
