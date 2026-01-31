@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, addWeeks, isSameDay, isSameMonth, startOfDay, endOfDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, User, Edit2, Check, X, Plus, CalendarPlus, ListFilter, Tag as TagIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, User, Edit2, Check, X, Plus, CalendarPlus, ListFilter, Tag as TagIcon, Filter, Eye, EyeOff } from 'lucide-react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,11 +13,34 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { SessionStatus, AppointmentType } from '@prisma/client';
 import { AppointmentModal } from '@/components/forms/appointment-modal';
 import { CalendarEventModal } from '@/components/calendar-event-modal';
 import { TagManager } from '@/components/tag-manager';
+
+// Hook para detectar viewport mobile
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < breakpoint);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, [breakpoint]);
+
+  return isMobile;
+}
+
+interface TagWithCount {
+  id: string;
+  name: string;
+  color: string;
+  _count?: { events: number };
+}
 
 type ViewMode = 'month' | 'week' | 'day';
 
@@ -121,8 +144,10 @@ const appointmentTypeDescriptions = {
 };
 
 export default function AgendaPage() {
+  const isMobile = useIsMobile();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('month');
+  const [hasSetInitialView, setHasSetInitialView] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -130,6 +155,12 @@ export default function AgendaPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [attendedPatients, setAttendedPatients] = useState<PatientStats[]>([]);
   const [missedPatients, setMissedPatients] = useState<PatientStats[]>([]);
+
+  // Estado para filtro de tags
+  const [tags, setTags] = useState<TagWithCount[]>([]);
+  const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(new Set());
+  const [showNoTag, setShowNoTag] = useState(true);
+  const [isTagFilterInit, setIsTagFilterInit] = useState(false);
 
   // Form states para edição
   const [editScheduledDate, setEditScheduledDate] = useState('');
@@ -152,6 +183,75 @@ export default function AgendaPage() {
 
   // Estado para tag manager
   const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
+
+  // Auto-switch para day view no mobile na primeira renderização
+  useEffect(() => {
+    if (!hasSetInitialView && isMobile) {
+      setViewMode('day');
+      setHasSetInitialView(true);
+    } else if (!hasSetInitialView && !isMobile) {
+      setHasSetInitialView(true);
+    }
+  }, [isMobile, hasSetInitialView]);
+
+  // Buscar tags para o filtro
+  const fetchTags = useCallback(async () => {
+    try {
+      const response = await fetch('/api/tags');
+      if (response.ok) {
+        const data: TagWithCount[] = await response.json();
+        setTags(data);
+        // Inicializar com todas selecionadas
+        if (!isTagFilterInit) {
+          setSelectedTagIds(new Set(data.map((t) => t.id)));
+          setShowNoTag(true);
+          setIsTagFilterInit(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching tags:', error);
+    }
+  }, [isTagFilterInit]);
+
+  useEffect(() => {
+    fetchTags();
+  }, [fetchTags]);
+
+  // Toggle de uma tag individual no filtro
+  const toggleTagFilter = (tagId: string) => {
+    setSelectedTagIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(tagId)) {
+        next.delete(tagId);
+      } else {
+        next.add(tagId);
+      }
+      return next;
+    });
+  };
+
+  // Selecionar/desselecionar todas
+  const toggleAllTags = () => {
+    const allSelected = selectedTagIds.size === tags.length && showNoTag;
+    if (allSelected) {
+      setSelectedTagIds(new Set());
+      setShowNoTag(false);
+    } else {
+      setSelectedTagIds(new Set(tags.map((t) => t.id)));
+      setShowNoTag(true);
+    }
+  };
+
+  // Filtrar eventos do calendário baseado nas tags selecionadas
+  const filterEventsByTags = (events: CalendarEvent[]) => {
+    return events.filter((evt) => {
+      if (!evt.tagId) return showNoTag;
+      return selectedTagIds.has(evt.tagId);
+    });
+  };
+
+  const activeFilterCount = selectedTagIds.size + (showNoTag ? 1 : 0);
+  const totalFilterCount = tags.length + 1; // +1 para "sem tag"
 
   // Abrir modal de criação ao clicar em um slot
   const handleSlotClick = (date: Date, time?: string) => {
@@ -187,6 +287,7 @@ export default function AgendaPage() {
   // Callback quando evento é criado/editado com sucesso
   const handleEventSuccess = () => {
     fetchCalendarEvents();
+    fetchTags(); // Atualizar contadores de tags
   };
 
   // Buscar eventos do calendário
@@ -221,15 +322,16 @@ export default function AgendaPage() {
     }
   };
 
-  // Obter eventos do calendário para um dia específico
+  // Obter eventos do calendário para um dia específico (com filtro de tags aplicado)
   const getCalendarEventsForDay = (day: Date) => {
-    return calendarEvents.filter((evt) => {
+    const dayEvents = calendarEvents.filter((evt) => {
       const start = parseISO(evt.startDate);
       const end = parseISO(evt.endDate);
       const dayStart = startOfDay(day);
       const dayEnd = endOfDay(day);
       return start <= dayEnd && end >= dayStart;
     });
+    return filterEventsByTags(dayEvents);
   };
 
   // Buscar agendamentos
@@ -402,16 +504,18 @@ export default function AgendaPage() {
   // Renderizar calendário mensal
   const renderMonthView = () => {
     const days = generateCalendarDays();
-    const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    const weekDaysFull = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    const weekDaysMobile = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+    const weekDays = isMobile ? weekDaysMobile : weekDaysFull;
 
     return (
       <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
         {/* Cabeçalho dos dias da semana */}
         <div className="grid grid-cols-7 border-b border-gray-200 dark:border-gray-700">
-          {weekDays.map((day) => (
+          {weekDays.map((day, i) => (
             <div
-              key={day}
-              className="p-2 text-center text-sm font-semibold text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800"
+              key={i}
+              className="p-1 sm:p-2 text-center text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800"
             >
               {day}
             </div>
@@ -438,6 +542,63 @@ export default function AgendaPage() {
               return new Date(dateA).getTime() - new Date(dateB).getTime();
             });
 
+            // Mobile: compact view (apenas número + indicadores de cor)
+            if (isMobile) {
+              return (
+                <div
+                  key={index}
+                  onClick={() => {
+                    setSelectedDate(day);
+                    setCurrentDate(day);
+                    setViewMode('day');
+                  }}
+                  className={`min-h-[48px] p-1 border-b border-r border-gray-200 dark:border-gray-700 cursor-pointer transition-colors flex flex-col items-center ${
+                    !isCurrentMonth ? 'bg-gray-50 dark:bg-gray-800/50' : ''
+                  } ${
+                    isSelected ? 'bg-purple-50 dark:bg-purple-900/20' : 'active:bg-gray-100 dark:active:bg-gray-800'
+                  }`}
+                >
+                  <span
+                    className={`text-xs font-medium mb-0.5 ${
+                      !isCurrentMonth
+                        ? 'text-gray-400 dark:text-gray-600'
+                        : isToday
+                        ? 'bg-purple-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px]'
+                        : 'text-gray-900 dark:text-gray-100'
+                    }`}
+                  >
+                    {format(day, 'd')}
+                  </span>
+                  {/* Indicadores de pontinhos coloridos */}
+                  {totalItems > 0 && (
+                    <div className="flex flex-wrap gap-0.5 justify-center max-w-full">
+                      {allItems.slice(0, 3).map((item, i) => {
+                        let dotColor = '#8B5CF6';
+                        if (item.type === 'appointment') {
+                          const apt = item.data as Appointment;
+                          dotColor = apt.procedure.color || '#3B82F6';
+                        } else {
+                          const evt = item.data as CalendarEvent;
+                          dotColor = evt.tag?.color || '#8B5CF6';
+                        }
+                        return (
+                          <div
+                            key={i}
+                            className="w-1.5 h-1.5 rounded-full"
+                            style={{ backgroundColor: dotColor }}
+                          />
+                        );
+                      })}
+                      {totalItems > 3 && (
+                        <span className="text-[8px] text-gray-400 leading-none">+{totalItems - 3}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            // Desktop: vista completa
             return (
               <div
                 key={index}
@@ -542,6 +703,88 @@ export default function AgendaPage() {
   const renderWeekView = () => {
     const days = generateWeekDays();
 
+    // Mobile: lista vertical dos dias da semana
+    if (isMobile) {
+      return (
+        <div className="space-y-3">
+          {days.map((day) => {
+            const dayAppointments = getAppointmentsForDay(day);
+            const dayEvents = getCalendarEventsForDay(day);
+            const isToday = isSameDay(day, new Date());
+            const totalItems = dayAppointments.length + dayEvents.length;
+
+            return (
+              <Card key={day.toISOString()} className={isToday ? 'border-purple-300 dark:border-purple-600' : ''}>
+                <div
+                  className={`px-4 py-2 flex items-center justify-between border-b ${
+                    isToday ? 'bg-purple-50 dark:bg-purple-900/20' : 'bg-gray-50 dark:bg-gray-800'
+                  }`}
+                  onClick={() => {
+                    setCurrentDate(day);
+                    setViewMode('day');
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`text-sm font-semibold ${isToday ? 'text-purple-600' : 'text-gray-700 dark:text-gray-300'}`}>
+                      {format(day, 'EEE', { locale: ptBR })}
+                    </span>
+                    <span className={`text-lg font-bold ${isToday ? 'text-purple-600' : 'text-gray-900 dark:text-gray-100'}`}>
+                      {format(day, 'd')}
+                    </span>
+                  </div>
+                  {totalItems > 0 && (
+                    <Badge variant="secondary" className="text-xs">{totalItems}</Badge>
+                  )}
+                </div>
+                {totalItems > 0 && (
+                  <div className="p-3 space-y-2">
+                    {dayAppointments.map((apt) => (
+                      <div
+                        key={apt.id}
+                        onClick={() => handleEditAppointment(apt)}
+                        style={getProcedureColorStyle(apt.procedure.color)}
+                        className={`p-2 rounded-lg cursor-pointer active:opacity-80 ${!apt.procedure.color ? statusColors[apt.status] : ''} ${!apt.procedure.color && apt.appointmentType ? appointmentTypeColors[apt.appointmentType] : ''}`}
+                      >
+                        <div className="font-medium text-sm">
+                          {apt.scheduledDate && format(parseISO(apt.scheduledDate), 'HH:mm')} — {apt.sale.patient.name}
+                        </div>
+                        <div className="text-xs mt-0.5 opacity-75">{apt.procedure.name}</div>
+                      </div>
+                    ))}
+                    {dayEvents.map((evt) => {
+                      const tagColor = evt.tag?.color || '#8B5CF6';
+                      return (
+                        <div
+                          key={evt.id}
+                          onClick={() => handleEditCalendarEvent(evt)}
+                          className="p-2 rounded-lg cursor-pointer active:opacity-80"
+                          style={{
+                            backgroundColor: `${tagColor}20`,
+                            borderLeft: `3px solid ${tagColor}`,
+                          }}
+                        >
+                          <div className="font-medium text-sm" style={{ color: tagColor }}>
+                            {format(parseISO(evt.startDate), 'HH:mm')} — {evt.title}
+                          </div>
+                          {evt.tag && (
+                            <div className="text-xs mt-0.5 opacity-75 flex items-center gap-1">
+                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: tagColor }} />
+                              {evt.tag.name}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // Desktop: grid padrão
     return (
       <div className="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div className="grid grid-cols-7 gap-px bg-gray-200 dark:bg-gray-700">
@@ -627,32 +870,43 @@ export default function AgendaPage() {
 
     return (
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Agendamentos do Dia</CardTitle>
-              <CardDescription>
-                {format(currentDate, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}
+        <CardHeader className="px-4 sm:px-6">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <CardTitle className="text-base sm:text-lg">Agendamentos do Dia</CardTitle>
+              <CardDescription className="text-xs sm:text-sm truncate">
+                {format(currentDate, "EEEE, d 'de' MMMM", { locale: ptBR })}
               </CardDescription>
             </div>
-            <Button
-              onClick={() => handleDayClickForEvent(currentDate)}
-              variant="outline"
-              size="sm"
-              className="text-purple-600"
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Evento
-            </Button>
+            <div className="flex gap-1.5 shrink-0">
+              <Button
+                onClick={() => handleDayClickForEvent(currentDate)}
+                variant="outline"
+                size="sm"
+                className="text-purple-600 text-xs sm:text-sm h-8"
+              >
+                <Plus className="h-3.5 w-3.5 sm:mr-1" />
+                <span className="hidden sm:inline">Evento</span>
+              </Button>
+              <Button
+                onClick={() => handleSlotClick(currentDate, '09:00')}
+                size="sm"
+                className="bg-purple-600 hover:bg-purple-700 text-xs sm:text-sm h-8"
+              >
+                <Plus className="h-3.5 w-3.5 sm:mr-1" />
+                <span className="hidden sm:inline">Agendar</span>
+              </Button>
+            </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-4 sm:px-6">
           {dayAppointments.length === 0 && dayEvents.length === 0 ? (
             <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-              Nenhum agendamento ou evento para este dia
+              <CalendarIcon className="h-10 w-10 mx-auto mb-2 opacity-30" />
+              <p className="text-sm">Nenhum agendamento ou evento para este dia</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2 sm:space-y-3">
               {/* Calendar Events */}
               {dayEvents.map((evt) => {
                 const tagColor = evt.tag?.color || '#8B5CF6';
@@ -660,7 +914,7 @@ export default function AgendaPage() {
                   <div
                     key={`evt-${evt.id}`}
                     onClick={() => handleEditCalendarEvent(evt)}
-                    className="flex items-start gap-4 p-4 rounded-lg border cursor-pointer transition-colors hover:opacity-90"
+                    className="flex items-start gap-3 sm:gap-4 p-3 sm:p-4 rounded-lg border cursor-pointer transition-colors active:opacity-90 hover:opacity-90"
                     style={{
                       borderColor: `${tagColor}40`,
                       backgroundColor: `${tagColor}10`,
@@ -668,32 +922,31 @@ export default function AgendaPage() {
                       borderLeftColor: tagColor,
                     }}
                   >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Clock className="h-4 w-4" style={{ color: tagColor }} />
-                        <span className="font-medium" style={{ color: tagColor }}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Clock className="h-3.5 w-3.5 shrink-0" style={{ color: tagColor }} />
+                        <span className="font-medium text-sm" style={{ color: tagColor }}>
                           {format(parseISO(evt.startDate), 'HH:mm')} - {format(parseISO(evt.endDate), 'HH:mm')}
                         </span>
                       </div>
-                      <div className="font-medium text-gray-900 dark:text-gray-100">
+                      <div className="font-medium text-gray-900 dark:text-gray-100 text-sm truncate">
                         {evt.title}
                       </div>
                       {evt.description && (
-                        <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                        <div className="mt-1 text-xs text-gray-600 dark:text-gray-400 line-clamp-2">
                           {evt.description}
                         </div>
                       )}
                     </div>
-                    <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-1 shrink-0">
                       {evt.tag && (
                         <Badge
-                          className="text-white"
+                          className="text-white text-xs"
                           style={{ backgroundColor: tagColor }}
                         >
                           {evt.tag.name}
                         </Badge>
                       )}
-                      <Badge variant="outline" className="text-xs">Evento</Badge>
                     </div>
                   </div>
                 );
@@ -704,35 +957,38 @@ export default function AgendaPage() {
                 <div
                   key={`apt-${apt.id}`}
                   onClick={() => handleEditAppointment(apt)}
-                  className={`flex items-start gap-4 p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-600 cursor-pointer transition-colors ${apt.appointmentType ? appointmentTypeColors[apt.appointmentType] : ''}`}
+                  style={getProcedureColorStyle(apt.procedure.color)}
+                  className={`flex items-start gap-3 sm:gap-4 p-3 sm:p-4 rounded-lg border border-gray-200 dark:border-gray-700 active:border-purple-300 hover:border-purple-300 dark:hover:border-purple-600 cursor-pointer transition-colors ${!apt.procedure.color && apt.appointmentType ? appointmentTypeColors[apt.appointmentType] : ''}`}
                 >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Clock className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                      <span className="font-medium text-gray-900 dark:text-gray-100">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Clock className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400 shrink-0" />
+                      <span className="font-medium text-sm text-gray-900 dark:text-gray-100">
                         {apt.scheduledDate && format(parseISO(apt.scheduledDate), 'HH:mm')}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <User className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                      <span className="text-gray-900 dark:text-gray-100">{apt.sale.patient.name}</span>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <User className="h-3.5 w-3.5 text-gray-500 dark:text-gray-400 shrink-0" />
+                      <span className="text-sm text-gray-900 dark:text-gray-100 truncate">{apt.sale.patient.name}</span>
                     </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                    <div className="text-xs text-gray-600 dark:text-gray-400 truncate">
                       {apt.procedure.name}
                     </div>
                     {apt.notes && (
-                      <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                      <div className="mt-1 text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
                         {apt.notes}
                       </div>
                     )}
                   </div>
-                  <div className="flex flex-col gap-2">
-                    <Badge className={statusColors[apt.status]}>
+                  <div className="flex flex-col gap-1 shrink-0">
+                    <Badge className={`text-xs ${statusColors[apt.status]}`}>
                       {statusLabels[apt.status]}
                     </Badge>
                     {apt.appointmentType && (
-                      <Badge className={appointmentTypeBadgeColors[apt.appointmentType]}>
-                        {appointmentTypeLabels[apt.appointmentType]}
+                      <Badge className={`text-xs ${appointmentTypeBadgeColors[apt.appointmentType]}`}>
+                        {isMobile
+                          ? appointmentTypeLabels[apt.appointmentType].split(' ').slice(0, 2).join(' ')
+                          : appointmentTypeLabels[apt.appointmentType]}
                       </Badge>
                     )}
                   </div>
@@ -746,144 +1002,249 @@ export default function AgendaPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Cabeçalho */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-1">
             Agenda
           </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Gerencie seus agendamentos e acompanhe o comparecimento dos pacientes
+          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">
+            Gerencie seus agendamentos e eventos
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Link href="/agenda/futuros">
-            <Button variant="outline">
-              <ListFilter className="h-4 w-4 mr-2" />
-              Ver Futuros
-            </Button>
-          </Link>
+          {!isMobile && (
+            <Link href="/agenda/futuros">
+              <Button variant="outline" size={isMobile ? 'sm' : 'default'}>
+                <ListFilter className="h-4 w-4 mr-2" />
+                Ver Futuros
+              </Button>
+            </Link>
+          )}
           <Button
             onClick={() => setIsTagManagerOpen(true)}
             variant="outline"
+            size={isMobile ? 'sm' : 'default'}
             className="border-purple-200 text-purple-600 hover:bg-purple-50"
           >
-            <TagIcon className="h-4 w-4 mr-2" />
-            Tags
+            <TagIcon className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Tags</span>
           </Button>
-          <Button
-            onClick={() => handleDayClickForEvent(new Date())}
-            variant="outline"
-            className="border-purple-200 text-purple-600 hover:bg-purple-50"
-          >
-            <CalendarPlus className="h-4 w-4 mr-2" />
-            Novo Evento
-          </Button>
+          {!isMobile && (
+            <Button
+              onClick={() => handleDayClickForEvent(new Date())}
+              variant="outline"
+              className="border-purple-200 text-purple-600 hover:bg-purple-50"
+            >
+              <CalendarPlus className="h-4 w-4 mr-2" />
+              Novo Evento
+            </Button>
+          )}
           <Button 
             onClick={() => handleSlotClick(new Date())} 
+            size={isMobile ? 'sm' : 'default'}
             className="bg-purple-600 hover:bg-purple-700"
           >
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Agendamento
+            <Plus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Novo Agendamento</span>
+            <span className="sm:hidden">Agendar</span>
           </Button>
         </div>
       </div>
 
-      {/* Legenda de Classificação de Consultas */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Classificação Visual de Consultas</CardTitle>
-          <CardDescription>
-            Identifique rapidamente o tipo de cada consulta através das cores na borda esquerda
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="flex items-start gap-3 p-3 rounded-lg border-l-4 border-red-500 bg-red-50 dark:bg-red-900/10">
-              <div>
-                <div className="font-semibold text-red-800 dark:text-red-400 mb-1">
-                  🔴 Primeira Consulta
+      {/* Legenda de Classificação de Consultas - oculta no mobile */}
+      {!isMobile && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Classificação Visual de Consultas</CardTitle>
+            <CardDescription>
+              Identifique rapidamente o tipo de cada consulta através das cores na borda esquerda
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="flex items-start gap-3 p-3 rounded-lg border-l-4 border-red-500 bg-red-50 dark:bg-red-900/10">
+                <div>
+                  <div className="font-semibold text-red-800 dark:text-red-400 mb-1">
+                    🔴 Primeira Consulta
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    Paciente novo em processo de conversão e diagnóstico inicial
+                  </div>
                 </div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">
-                  Paciente novo em processo de conversão e diagnóstico inicial
+              </div>
+              <div className="flex items-start gap-3 p-3 rounded-lg border-l-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-900/10">
+                <div>
+                  <div className="font-semibold text-yellow-800 dark:text-yellow-400 mb-1">
+                    🟡 Pendência Financeira
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    Consulta com cobrança em aberto ou pagamento pendente
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-3 rounded-lg border-l-4 border-green-500 bg-green-50 dark:bg-green-900/10">
+                <div>
+                  <div className="font-semibold text-green-800 dark:text-green-400 mb-1">
+                    🟢 Retorno/Acompanhamento
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                    Consulta de retorno para continuidade do tratamento
+                  </div>
                 </div>
               </div>
             </div>
-            <div className="flex items-start gap-3 p-3 rounded-lg border-l-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-900/10">
-              <div>
-                <div className="font-semibold text-yellow-800 dark:text-yellow-400 mb-1">
-                  🟡 Pendência Financeira
-                </div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">
-                  Consulta com cobrança em aberto ou pagamento pendente
-                </div>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 p-3 rounded-lg border-l-4 border-green-500 bg-green-50 dark:bg-green-900/10">
-              <div>
-                <div className="font-semibold text-green-800 dark:text-green-400 mb-1">
-                  🟢 Retorno/Acompanhamento
-                </div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">
-                  Consulta de retorno para continuidade do tratamento
-                </div>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Controles do Calendário */}
       <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            {/* Navegação de período */}
-            <div className="flex items-center gap-2">
-              <Button onClick={handlePrevious} variant="outline" size="sm">
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button onClick={handleToday} variant="outline" size="sm">
-                Hoje
-              </Button>
-              <Button onClick={handleNext} variant="outline" size="sm">
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-              <div className="ml-4 text-lg font-semibold text-gray-900 dark:text-gray-100">
-                {viewMode === 'month' && format(currentDate, "MMMM 'de' yyyy", { locale: ptBR })}
+        <CardContent className="p-3 sm:p-4">
+          <div className="flex flex-col gap-3">
+            {/* Linha 1: Navegação + período */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1 sm:gap-2">
+                <Button onClick={handlePrevious} variant="outline" size="sm" className="h-8 w-8 p-0 sm:h-9 sm:w-auto sm:px-3">
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button onClick={handleToday} variant="outline" size="sm" className="h-8 text-xs sm:text-sm sm:h-9">
+                  Hoje
+                </Button>
+                <Button onClick={handleNext} variant="outline" size="sm" className="h-8 w-8 p-0 sm:h-9 sm:w-auto sm:px-3">
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="text-sm sm:text-lg font-semibold text-gray-900 dark:text-gray-100 text-right truncate">
+                {viewMode === 'month' && format(currentDate, isMobile ? "MMM yyyy" : "MMMM 'de' yyyy", { locale: ptBR })}
                 {viewMode === 'week' && (
-                  `${format(startOfWeek(currentDate, { locale: ptBR }), 'd MMM', { locale: ptBR })} - ${format(endOfWeek(currentDate, { locale: ptBR }), 'd MMM yyyy', { locale: ptBR })}`
+                  `${format(startOfWeek(currentDate, { locale: ptBR }), 'd MMM', { locale: ptBR })} - ${format(endOfWeek(currentDate, { locale: ptBR }), isMobile ? 'd MMM' : 'd MMM yyyy', { locale: ptBR })}`
                 )}
-                {viewMode === 'day' && format(currentDate, "d 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                {viewMode === 'day' && format(currentDate, isMobile ? "d 'de' MMM" : "d 'de' MMMM 'de' yyyy", { locale: ptBR })}
               </div>
             </div>
 
-            {/* Seletor de visualização */}
-            <div className="flex gap-2">
-              <Button
-                onClick={() => setViewMode('month')}
-                variant={viewMode === 'month' ? 'default' : 'outline'}
-                size="sm"
-                className={viewMode === 'month' ? 'bg-purple-600 hover:bg-purple-700' : ''}
-              >
-                Mês
-              </Button>
-              <Button
-                onClick={() => setViewMode('week')}
-                variant={viewMode === 'week' ? 'default' : 'outline'}
-                size="sm"
-                className={viewMode === 'week' ? 'bg-purple-600 hover:bg-purple-700' : ''}
-              >
-                Semana
-              </Button>
-              <Button
-                onClick={() => setViewMode('day')}
-                variant={viewMode === 'day' ? 'default' : 'outline'}
-                size="sm"
-                className={viewMode === 'day' ? 'bg-purple-600 hover:bg-purple-700' : ''}
-              >
-                Dia
-              </Button>
+            {/* Linha 2: Seletor de view + Filtro de tags */}
+            <div className="flex items-center justify-between gap-2">
+              {/* Seletor de visualização */}
+              <div className="flex gap-1 sm:gap-2">
+                <Button
+                  onClick={() => setViewMode('month')}
+                  variant={viewMode === 'month' ? 'default' : 'outline'}
+                  size="sm"
+                  className={`h-8 text-xs sm:text-sm ${viewMode === 'month' ? 'bg-purple-600 hover:bg-purple-700' : ''}`}
+                >
+                  Mês
+                </Button>
+                <Button
+                  onClick={() => setViewMode('week')}
+                  variant={viewMode === 'week' ? 'default' : 'outline'}
+                  size="sm"
+                  className={`h-8 text-xs sm:text-sm ${viewMode === 'week' ? 'bg-purple-600 hover:bg-purple-700' : ''}`}
+                >
+                  Semana
+                </Button>
+                <Button
+                  onClick={() => setViewMode('day')}
+                  variant={viewMode === 'day' ? 'default' : 'outline'}
+                  size="sm"
+                  className={`h-8 text-xs sm:text-sm ${viewMode === 'day' ? 'bg-purple-600 hover:bg-purple-700' : ''}`}
+                >
+                  Dia
+                </Button>
+              </div>
+
+              {/* Filtro de Tags */}
+              {tags.length > 0 && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={`h-8 text-xs sm:text-sm gap-1.5 ${
+                        activeFilterCount < totalFilterCount
+                          ? 'border-purple-300 bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-300 dark:border-purple-700'
+                          : ''
+                      }`}
+                    >
+                      <Filter className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Filtrar Tags</span>
+                      <span className="sm:hidden">Tags</span>
+                      {activeFilterCount < totalFilterCount && (
+                        <Badge variant="secondary" className="h-4 px-1 text-[10px] ml-0.5">
+                          {activeFilterCount}/{totalFilterCount}
+                        </Badge>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 p-3" align="end">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold text-sm text-gray-900 dark:text-gray-100">
+                          Filtrar por Tags
+                        </h4>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={toggleAllTags}
+                          className="h-7 text-xs text-purple-600 hover:text-purple-700"
+                        >
+                          {selectedTagIds.size === tags.length && showNoTag ? (
+                            <><EyeOff className="h-3 w-3 mr-1" /> Ocultar todas</>
+                          ) : (
+                            <><Eye className="h-3 w-3 mr-1" /> Mostrar todas</>
+                          )}
+                        </Button>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        {/* Sem tag */}
+                        <label className="flex items-center gap-2.5 p-1.5 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors">
+                          <Checkbox
+                            checked={showNoTag}
+                            onCheckedChange={() => setShowNoTag(!showNoTag)}
+                            className="border-gray-400 data-[state=checked]:bg-gray-500 data-[state=checked]:border-gray-500"
+                          />
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full bg-gray-400 border border-gray-300" />
+                            <span className="text-sm text-gray-700 dark:text-gray-300">Sem tag</span>
+                          </div>
+                        </label>
+
+                        {/* Tags */}
+                        {tags.map((tag) => (
+                          <label
+                            key={tag.id}
+                            className="flex items-center gap-2.5 p-1.5 rounded-md hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors"
+                          >
+                            <Checkbox
+                              checked={selectedTagIds.has(tag.id)}
+                              onCheckedChange={() => toggleTagFilter(tag.id)}
+                              style={{
+                                borderColor: tag.color,
+                                backgroundColor: selectedTagIds.has(tag.id) ? tag.color : 'transparent',
+                              }}
+                            />
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <div
+                                className="w-3 h-3 rounded-full shrink-0"
+                                style={{ backgroundColor: tag.color }}
+                              />
+                              <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
+                                {tag.name}
+                              </span>
+                            </div>
+                            {tag._count && (
+                              <span className="text-xs text-gray-400 shrink-0">{tag._count.events}</span>
+                            )}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
             </div>
           </div>
         </CardContent>
@@ -1143,7 +1504,10 @@ export default function AgendaPage() {
       <TagManager
         isOpen={isTagManagerOpen}
         onClose={() => setIsTagManagerOpen(false)}
-        onTagsChanged={fetchCalendarEvents}
+        onTagsChanged={() => {
+          fetchCalendarEvents();
+          fetchTags();
+        }}
       />
     </div>
   );
