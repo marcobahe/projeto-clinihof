@@ -60,12 +60,16 @@ model User {
   password      String
   fullName      String
   role          UserRole  @default(USER)
+  workspaceId   String?   // Workspace that this user belongs to (for team members)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   
-  accounts      Account[]
-  sessions      Session[]
-  workspaces    Workspace[]
+  accounts        Account[]
+  sessions        Session[]
+  ownedWorkspaces Workspace[] @relation("WorkspaceOwner")
+  workspace       Workspace?  @relation("WorkspaceMembers", fields: [workspaceId], references: [id], onDelete: SetNull)
+  
+  @@index([workspaceId])
 }
 
 model VerificationToken {
@@ -87,7 +91,8 @@ model Workspace {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
   
-  owner         User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner         User             @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members       User[]           @relation("WorkspaceMembers")
   patients      Patient[]
   procedures    Procedure[]
   sales         Sale[]

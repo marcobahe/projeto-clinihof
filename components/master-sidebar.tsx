@@ -12,6 +12,7 @@ import {
   LogOut,
   X,
   ArrowLeft,
+  Crown,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -22,6 +23,7 @@ const masterNavigation = [
   { name: 'Dashboard', href: '/master', icon: LayoutDashboard },
   { name: 'Workspaces', href: '/master/workspaces', icon: Building2 },
   { name: 'Usuários', href: '/master/users', icon: Users },
+  { name: 'Administradores', href: '/master/admins', icon: Crown },
   { name: 'Configurações', href: '/master/settings', icon: Settings },
 ];
 

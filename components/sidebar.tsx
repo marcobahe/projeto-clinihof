@@ -23,31 +23,30 @@ import {
   Settings,
   Shield,
   Percent,
+  Users2,
 } from 'lucide-react';
+import { getVisibleMenuItems } from '@/lib/permissions';
+import { UserRole } from '@prisma/client';
 import { Button } from './ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { ThemeToggle } from './theme-toggle';
 import { useEffect, useState } from 'react';
 
-const navigation = [
-  { name: 'Painel', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Atendimentos', href: '/appointments', icon: Calendar },
-  { name: 'Agenda', href: '/agenda', icon: CalendarDays },
-  { name: 'Agendamentos Futuros', href: '/agenda/futuros', icon: CalendarDays },
-  { name: 'Pacientes', href: '/patients', icon: Users },
-  { name: 'Orçamentos', href: '/quotes', icon: FileText },
-  { name: 'Comissões', href: '/comissoes', icon: Percent },
-  { name: 'Custos', href: '/costs', icon: DollarSign },
-  { name: 'Fluxo de Caixa', href: '/cashflow', icon: TrendingUp },
-  { name: 'Insumos', href: '/supplies', icon: Package },
-  { name: 'Colaboradores', href: '/collaborators', icon: UsersRound },
-  { name: 'Procedimentos', href: '/procedures', icon: Stethoscope },
-  { name: 'Precificação (Pacotes)', href: '/packages', icon: Tag },
-  { name: 'Sessões de Pacotes', href: '/pacotes-sessoes', icon: Package },
-  { name: 'Configurações', href: '/configuracoes', icon: Settings },
-  { name: 'Usuários', href: '/usuarios', icon: Shield },
-  { name: 'Administração', href: '/admin', icon: Settings },
-  { name: 'Minha Conta', href: '/account', icon: UserCircle },
+const getAllMenuItems = () => [
+  { key: 'dashboard', name: 'Painel', href: '/admin', icon: LayoutDashboard },
+  { key: 'agenda', name: 'Agenda', href: '/appointments', icon: Calendar },
+  { key: 'patients', name: 'Pacientes', href: '/patients', icon: Users },
+  { key: 'quotes', name: 'Orçamentos', href: '/quotes', icon: FileText },
+  { key: 'procedures', name: 'Procedimentos', href: '/procedures', icon: Stethoscope },
+  { key: 'collaborators', name: 'Colaboradores', href: '/collaborators', icon: UsersRound },
+  { key: 'sales', name: 'Vendas', href: '/admin', icon: DollarSign },
+  { key: 'commissions', name: 'Comissões', href: '/comissoes', icon: Percent },
+  { key: 'cashflow', name: 'Fluxo de Caixa', href: '/cashflow', icon: TrendingUp },
+  { key: 'team', name: 'Equipe', href: '/team', icon: Users2 },
+  { key: 'settings', name: 'Configurações', href: '/configuracoes', icon: Settings },
+  
+  // Itens extras que ainda não estão no sistema de permissões (manter sempre visíveis por ora)
+  { key: 'account', name: 'Minha Conta', href: '/account', icon: UserCircle, alwaysVisible: true },
 ];
 
 interface SidebarProps {
@@ -84,13 +83,13 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
           </Link>
         </div>
         <nav className="flex-1 space-y-1 px-3 py-4">
-          {navigation.map((item) => (
+          {Array.from({ length: 8 }).map((_, i) => (
             <div
-              key={item.name}
+              key={i}
               className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-300"
             >
-              <item.icon className="h-5 w-5" />
-              {item.name}
+              <div className="h-5 w-5 bg-gray-700 rounded animate-pulse" />
+              <div className="h-4 bg-gray-700 rounded animate-pulse flex-1" />
             </div>
           ))}
         </nav>
@@ -183,30 +182,40 @@ function SidebarContent({
 
       {/* Navigation */}
       <nav className="flex-1 space-y-1 px-3 py-2 overflow-y-auto">
-        {navigation.map((item) => {
-          const isActive = pathname === item.href;
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              onClick={() => {
-                // Close sidebar on mobile when clicking a link
-                if (window.innerWidth < 1024) {
-                  onClose?.();
-                }
-              }}
-              className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
-                isActive
-                  ? 'bg-purple-600 dark:bg-purple-700 text-white shadow-lg'
-                  : 'text-gray-300 dark:text-gray-400 hover:bg-gray-700/50 dark:hover:bg-gray-800/50 hover:text-white'
-              )}
-            >
-              <item.icon className="h-5 w-5 flex-shrink-0" />
-              <span className="truncate">{item.name}</span>
-            </Link>
-          );
-        })}
+        {getAllMenuItems()
+          .filter(item => {
+            // Sempre mostrar itens marcados como alwaysVisible
+            if (item.alwaysVisible) return true;
+            
+            // Filtrar baseado nas permissões do usuário
+            if (!user?.role) return false;
+            return getVisibleMenuItems(user.role as UserRole)
+              .some(visibleItem => visibleItem.key === item.key);
+          })
+          .map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                onClick={() => {
+                  // Close sidebar on mobile when clicking a link
+                  if (window.innerWidth < 1024) {
+                    onClose?.();
+                  }
+                }}
+                className={cn(
+                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
+                  isActive
+                    ? 'bg-purple-600 dark:bg-purple-700 text-white shadow-lg'
+                    : 'text-gray-300 dark:text-gray-400 hover:bg-gray-700/50 dark:hover:bg-gray-800/50 hover:text-white'
+                )}
+              >
+                <item.icon className="h-5 w-5 flex-shrink-0" />
+                <span className="truncate">{item.name}</span>
+              </Link>
+            );
+          })}
       </nav>
 
       {/* User Profile */}

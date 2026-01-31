@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRequirePermission } from '@/hooks/use-permissions';
 import { format, subDays, startOfMonth, endOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { formatCurrency, formatNumber, formatPercent } from '@/lib/utils';
@@ -113,6 +114,8 @@ const COLORS = {
 };
 
 export default function CashFlowPage() {
+  const { hasAccess, isLoading: permissionLoading } = useRequirePermission('cashflow');
+  
   // Date range state - default to current month
   const [startDate, setStartDate] = useState<string>(
     format(startOfMonth(new Date()), 'yyyy-MM-dd')
@@ -221,6 +224,14 @@ export default function CashFlowPage() {
 
   const healthStatus = getHealthStatus();
   const HealthIcon = healthStatus.icon;
+
+  if (loading || permissionLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">

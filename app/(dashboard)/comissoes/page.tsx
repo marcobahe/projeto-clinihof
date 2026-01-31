@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRequirePermission } from '@/hooks/use-permissions';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,6 +39,7 @@ interface Collaborator {
 }
 
 export default function ComissoesPage() {
+  const { hasAccess, isLoading: permissionLoading } = useRequirePermission('commissions');
   const [commissions, setCommissions] = useState<Commission[]>([]);
   const [sellerTotals, setSellerTotals] = useState<SellerTotal[]>([]);
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
@@ -86,6 +88,14 @@ export default function ComissoesPage() {
     setStartDate(format(startOfMonth(targetDate), 'yyyy-MM-dd'));
     setEndDate(format(endOfMonth(targetDate), 'yyyy-MM-dd'));
   };
+
+  if (loading || permissionLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 space-y-8 max-w-[1600px] mx-auto">
