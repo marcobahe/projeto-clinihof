@@ -57,7 +57,7 @@ export default function WorkspacesPage() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
@@ -86,7 +86,7 @@ export default function WorkspacesPage() {
         params.set('search', search);
       }
 
-      if (statusFilter) {
+      if (statusFilter && statusFilter !== 'all') {
         params.set('status', statusFilter);
       }
 
@@ -186,7 +186,7 @@ export default function WorkspacesPage() {
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todos</SelectItem>
+                  <SelectItem value="all">Todos</SelectItem>
                   <SelectItem value="ACTIVE">Ativo</SelectItem>
                   <SelectItem value="SUSPENDED">Suspenso</SelectItem>
                   <SelectItem value="CANCELLED">Cancelado</SelectItem>

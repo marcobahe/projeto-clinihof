@@ -54,7 +54,7 @@ export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState<string>('');
+  const [roleFilter, setRoleFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
@@ -83,7 +83,7 @@ export default function UsersPage() {
         params.set('search', search);
       }
 
-      if (roleFilter) {
+      if (roleFilter && roleFilter !== 'all') {
         params.set('role', roleFilter);
       }
 
@@ -181,7 +181,7 @@ export default function UsersPage() {
                   <SelectValue placeholder="Role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todos</SelectItem>
+                  <SelectItem value="all">Todos</SelectItem>
                   <SelectItem value="MASTER">Master</SelectItem>
                   <SelectItem value="ADMIN">Admin</SelectItem>
                   <SelectItem value="MANAGER">Manager</SelectItem>
