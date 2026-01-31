@@ -34,7 +34,7 @@ import { useEffect, useState } from 'react';
 
 const getAllMenuItems = () => [
   { key: 'dashboard', name: 'Painel', href: '/admin', icon: LayoutDashboard },
-  { key: 'agenda', name: 'Agenda', href: '/appointments', icon: Calendar },
+  { key: 'agenda', name: 'Agenda', href: '/agenda', icon: Calendar },
   { key: 'patients', name: 'Pacientes', href: '/patients', icon: Users },
   { key: 'quotes', name: 'Orçamentos', href: '/quotes', icon: FileText },
   { key: 'procedures', name: 'Procedimentos', href: '/procedures', icon: Stethoscope },

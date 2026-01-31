@@ -14,7 +14,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { AppointmentType } from '@prisma/client';
+// Tipo inline para evitar importar @prisma/client no browser
+type AppointmentType = 'FIRST_VISIT' | 'PAYMENT_PENDING' | 'FOLLOW_UP';
 
 interface Patient {
   id: string;
