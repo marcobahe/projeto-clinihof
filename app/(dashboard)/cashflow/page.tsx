@@ -115,7 +115,7 @@ const COLORS = {
 
 export default function CashFlowPage() {
   const { hasAccess, isLoading: permissionLoading } = useRequirePermission('cashflow');
-  
+
   // Date range state - default to current month
   const [startDate, setStartDate] = useState<string>(
     format(startOfMonth(new Date()), 'yyyy-MM-dd')
