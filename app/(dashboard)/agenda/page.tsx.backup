@@ -16,9 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
-// Tipos inline para evitar importar @prisma/client no browser
-type SessionStatus = 'PENDING' | 'SCHEDULED' | 'COMPLETED' | 'CANCELLED';
-type AppointmentType = 'FIRST_VISIT' | 'PAYMENT_PENDING' | 'FOLLOW_UP';
+import { SessionStatus, AppointmentType } from '@prisma/client';
 import { AppointmentModal } from '@/components/forms/appointment-modal';
 import { CalendarEventModal } from '@/components/calendar-event-modal';
 import { TagManager } from '@/components/tag-manager';
