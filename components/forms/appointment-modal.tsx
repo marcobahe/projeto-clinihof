@@ -268,7 +268,7 @@ export function AppointmentModal({
                 <SelectValue placeholder="Selecione o profissional" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Não especificado</SelectItem>
+                <SelectItem value="none">Não especificado</SelectItem>
                 {collaborators.map((collab) => (
                   <SelectItem key={collab.id} value={collab.id}>
                     <div className="flex flex-col">
