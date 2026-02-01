@@ -652,6 +652,9 @@ model WorkspaceSettings {
   monthlyWorkingHours   Float     @default(176) // Horas trabalhadas por mês (22 dias × 8h)
   hourlyClinicCost      Float?    // Custo por hora da clínica (calculado: monthlyFixedCosts / monthlyWorkingHours)
   
+  // Clinic logo (base64 encoded)
+  clinicLogo            String?   @db.Text // Logo da clínica em base64 para uso nos PDFs
+  
   // Google Calendar sync settings
   googleCalendarEnabled Boolean   @default(false) // Se a sincronização está ativa
   googleCalendarId      String?   // ID do calendário Google a sincronizar

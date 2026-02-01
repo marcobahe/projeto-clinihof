@@ -11,7 +11,10 @@ import {
   Check,
   AlertCircle,
   ExternalLink,
-  Loader2
+  Loader2,
+  Upload,
+  ImageIcon,
+  Trash2
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -57,11 +60,94 @@ export default function ConfiguracoesPage() {
   const [loadingCalendars, setLoadingCalendars] = useState(false);
   const [googleCalendars, setGoogleCalendars] = useState<GoogleCalendar[]>([]);
 
+  // Logo states
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [deletingLogo, setDeletingLogo] = useState(false);
+
   // Form states
   const [monthlyFixedCosts, setMonthlyFixedCosts] = useState<string>('0');
   const [monthlyWorkingHours, setMonthlyWorkingHours] = useState<string>('176');
   const [googleCalendarEnabled, setGoogleCalendarEnabled] = useState(false);
   const [googleCalendarId, setGoogleCalendarId] = useState<string>('primary');
+
+  // Fetch clinic logo
+  const fetchLogo = async () => {
+    try {
+      const response = await fetch('/api/settings/logo');
+      if (response.ok) {
+        const data = await response.json();
+        setLogoPreview(data.logo || null);
+      }
+    } catch (error) {
+      console.error('Error fetching logo:', error);
+    }
+  };
+
+  // Upload clinic logo
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Client-side validation
+    if (!['image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) {
+      toast.error('Formato inválido (use PNG ou JPEG)');
+      return;
+    }
+    if (file.size > 500 * 1024) {
+      toast.error('Arquivo muito grande (máx 500KB)');
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const formData = new FormData();
+      formData.append('logo', file);
+
+      const response = await fetch('/api/settings/logo', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setLogoPreview(data.logo);
+        toast.success('Logomarca salva com sucesso!');
+      } else {
+        const data = await response.json();
+        toast.error(data.error || 'Erro ao enviar logomarca');
+      }
+    } catch (error) {
+      console.error('Error uploading logo:', error);
+      toast.error('Erro ao enviar logomarca');
+    } finally {
+      setUploadingLogo(false);
+      // Reset input
+      e.target.value = '';
+    }
+  };
+
+  // Delete clinic logo
+  const handleDeleteLogo = async () => {
+    setDeletingLogo(true);
+    try {
+      const response = await fetch('/api/settings/logo', {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        setLogoPreview(null);
+        toast.success('Logomarca removida com sucesso!');
+      } else {
+        toast.error('Erro ao remover logomarca');
+      }
+    } catch (error) {
+      console.error('Error deleting logo:', error);
+      toast.error('Erro ao remover logomarca');
+    } finally {
+      setDeletingLogo(false);
+    }
+  };
 
   // Fetch Google calendars
   const fetchGoogleCalendars = async () => {
@@ -107,6 +193,7 @@ export default function ConfiguracoesPage() {
 
   useEffect(() => {
     fetchSettings();
+    fetchLogo();
   }, []);
 
   // Calculate hourly cost
@@ -207,6 +294,90 @@ export default function ConfiguracoesPage() {
           Gerencie as configurações da sua clínica
         </p>
       </div>
+
+      {/* Clinic Logo */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ImageIcon className="h-5 w-5 text-purple-600" />
+            Logomarca da Clínica
+          </CardTitle>
+          <CardDescription>
+            Faça upload da logomarca para exibir nos PDFs de orçamento. Recomendado: 400×150px, formato PNG com fundo transparente para melhor resultado.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {logoPreview ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-center p-6 bg-gray-50 dark:bg-gray-800 rounded-lg border border-dashed border-gray-300 dark:border-gray-600">
+                <img
+                  src={logoPreview}
+                  alt="Logomarca da clínica"
+                  className="max-h-24 max-w-[300px] object-contain"
+                />
+              </div>
+              <div className="flex gap-2">
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    onChange={handleLogoUpload}
+                    className="hidden"
+                    disabled={uploadingLogo}
+                  />
+                  <Button variant="outline" size="sm" asChild disabled={uploadingLogo}>
+                    <span>
+                      {uploadingLogo ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Upload className="h-4 w-4 mr-2" />
+                      )}
+                      Alterar Logo
+                    </span>
+                  </Button>
+                </label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDeleteLogo}
+                  disabled={deletingLogo}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                >
+                  {deletingLogo ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 mr-2" />
+                  )}
+                  Remover
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <label className="cursor-pointer">
+              <input
+                type="file"
+                accept="image/png,image/jpeg"
+                onChange={handleLogoUpload}
+                className="hidden"
+                disabled={uploadingLogo}
+              />
+              <div className="flex flex-col items-center justify-center p-8 bg-gray-50 dark:bg-gray-800 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/10 transition-colors">
+                {uploadingLogo ? (
+                  <Loader2 className="h-10 w-10 text-purple-400 animate-spin mb-3" />
+                ) : (
+                  <Upload className="h-10 w-10 text-gray-400 mb-3" />
+                )}
+                <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                  {uploadingLogo ? 'Enviando...' : 'Clique para fazer upload da logomarca'}
+                </span>
+                <span className="text-xs text-gray-400 mt-1">
+                  PNG ou JPEG • Máximo 500KB
+                </span>
+              </div>
+            </label>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Clinic Costs Settings */}

@@ -47,9 +47,16 @@ export async function GET(
       return NextResponse.json({ error: 'Orçamento não encontrado' }, { status: 404 });
     }
 
+    // Buscar logo da clínica
+    const workspaceSettings = await prisma.workspaceSettings.findUnique({
+      where: { workspaceId: workspace.id },
+      select: { clinicLogo: true },
+    });
+
     // Preparar dados para o PDF
     const pdfData = {
       clinicName: workspace.name,
+      clinicLogo: workspaceSettings?.clinicLogo || undefined,
       professionalName: quote.collaborator?.name || 'Não especificado',
       patientName: quote.patient.name,
       patientPhone: quote.patient.phone || undefined,

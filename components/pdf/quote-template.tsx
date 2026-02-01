@@ -1,5 +1,5 @@
 import React from 'react';
-import { Document, Page, Text, View, StyleSheet, Font } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet, Font, Image } from '@react-pdf/renderer';
 import { formatCurrency } from '@/lib/utils';
 
 // Registrar fontes (opcional - usando fontes padrão)
@@ -19,6 +19,17 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     borderBottom: '2 solid #9333ea',
     paddingBottom: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerLogo: {
+    width: 120,
+    maxHeight: 60,
+    marginRight: 15,
+    objectFit: 'contain' as any,
+  },
+  headerText: {
+    flex: 1,
   },
   clinicName: {
     fontSize: 24,
@@ -143,6 +154,7 @@ interface QuoteItem {
 
 interface QuoteData {
   clinicName: string;
+  clinicLogo?: string;
   professionalName: string;
   patientName: string;
   patientPhone?: string;
@@ -178,9 +190,14 @@ export const QuoteTemplate: React.FC<QuoteTemplateProps> = ({ data }) => {
       <Page size="A4" style={styles.page}>
         {/* Cabeçalho */}
         <View style={styles.header}>
-          <Text style={styles.clinicName}>{data.clinicName}</Text>
-          <Text style={styles.subtitle}>Orçamento Personalizado</Text>
-          <Text style={styles.subtitle}>Nº {data.quoteNumber}</Text>
+          {data.clinicLogo && (
+            <Image style={styles.headerLogo} src={data.clinicLogo} />
+          )}
+          <View style={styles.headerText}>
+            <Text style={styles.clinicName}>{data.clinicName}</Text>
+            <Text style={styles.subtitle}>Orçamento Personalizado</Text>
+            <Text style={styles.subtitle}>Nº {data.quoteNumber}</Text>
+          </View>
         </View>
 
         {/* Informações Gerais */}
