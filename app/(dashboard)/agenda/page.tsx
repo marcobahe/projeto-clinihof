@@ -238,48 +238,58 @@ export default function AgendaPage() {
     checkGoogleCalendarSettings();
   }, []);
 
+  // Google Calendar sync function (used by both polling and manual trigger)
+  const syncGoogleCalendar = useCallback(async (manual = false) => {
+    if (isSyncing) return;
+    try {
+      setIsSyncing(true);
+      const now = new Date();
+      const startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 days ago
+      const endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days ahead
+
+      const response = await fetch('/api/google-calendar/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'pull',
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setLastGoogleSync(new Date());
+        if (data.synced > 0) {
+          setRefreshKey((k) => k + 1);
+          if (manual) {
+            toast.success(`${data.synced} evento${data.synced > 1 ? 's' : ''} sincronizado${data.synced > 1 ? 's' : ''} do Google Calendar`);
+          }
+        } else if (manual) {
+          toast.success('Google Calendar já está sincronizado');
+        }
+      } else if (manual) {
+        toast.error('Erro ao sincronizar com Google Calendar');
+      }
+    } catch {
+      if (manual) {
+        toast.error('Erro ao sincronizar com Google Calendar');
+      }
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [isSyncing]);
+
   // Google Calendar polling - every 5 minutes
   useEffect(() => {
     if (!googleCalendarEnabled) return;
 
-    const pollGoogleCalendar = async () => {
-      try {
-        setIsSyncing(true);
-        const now = new Date();
-        const startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 days ago
-        const endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days ahead
-
-        const response = await fetch('/api/google-calendar/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'pull',
-            startDate: startDate.toISOString(),
-            endDate: endDate.toISOString(),
-          }),
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          setLastGoogleSync(new Date());
-          // If changes were synced, refresh the calendar view
-          if (data.synced > 0) {
-            setRefreshKey((k) => k + 1);
-          }
-        }
-      } catch {
-        // Silently ignore errors - will retry next cycle
-      } finally {
-        setIsSyncing(false);
-      }
-    };
-
     // Run immediately on mount, then every 5 minutes
-    pollGoogleCalendar();
-    const intervalId = setInterval(pollGoogleCalendar, 5 * 60 * 1000);
+    syncGoogleCalendar(false);
+    const intervalId = setInterval(() => syncGoogleCalendar(false), 5 * 60 * 1000);
 
     return () => clearInterval(intervalId);
-  }, [googleCalendarEnabled]);
+  }, [googleCalendarEnabled, syncGoogleCalendar]);
 
   // Buscar tags para o filtro
   const fetchTags = useCallback(async () => {
@@ -1097,13 +1107,22 @@ export default function AgendaPage() {
           <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">
             Gerencie seus agendamentos e eventos
           </p>
-          {googleCalendarEnabled && lastGoogleSync && (
-            <div className="flex items-center gap-1.5 mt-1">
-              <RefreshCw className={`h-3 w-3 text-gray-400 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span className="text-xs text-gray-400">
-                Google Calendar: sync {formatSyncTime(lastGoogleSync)}
+          {googleCalendarEnabled && (
+            <button
+              onClick={() => syncGoogleCalendar(true)}
+              disabled={isSyncing}
+              className="flex items-center gap-1.5 mt-1 group cursor-pointer disabled:cursor-wait"
+              title="Sincronizar Google Calendar"
+            >
+              <RefreshCw className={`h-3 w-3 text-gray-400 group-hover:text-purple-500 transition-colors ${isSyncing ? 'animate-spin' : ''}`} />
+              <span className="text-xs text-gray-400 group-hover:text-purple-500 transition-colors">
+                {isSyncing
+                  ? 'Sincronizando...'
+                  : lastGoogleSync
+                  ? `Google sync ${formatSyncTime(lastGoogleSync)}`
+                  : 'Sincronizar Google Calendar'}
               </span>
-            </div>
+            </button>
           )}
         </div>
         <div className="flex gap-2 flex-wrap">
