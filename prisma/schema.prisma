@@ -655,6 +655,10 @@ model WorkspaceSettings {
   // Clinic logo (base64 encoded)
   clinicLogo            String?   @db.Text // Logo da clínica em base64 para uso nos PDFs
   
+  // Quote PDF settings
+  paymentTerms          String?   @db.Text // Formas de pagamento padrão (ex: "PIX, cartão em até 12x, boleto")
+  quoteTerms            String?   @db.Text // Termos e condições padrão para orçamentos
+  
   // Google Calendar sync settings
   googleCalendarEnabled Boolean   @default(false) // Se a sincronização está ativa
   googleCalendarId      String?   // ID do calendário Google a sincronizar

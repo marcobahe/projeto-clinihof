@@ -14,12 +14,16 @@ import {
   Loader2,
   Upload,
   ImageIcon,
-  Trash2
+  Trash2,
+  FileText,
+  CreditCard,
+  ScrollText
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -42,6 +46,8 @@ interface WorkspaceSettings {
   googleCalendarId: string | null;
   lastGoogleSync: string | null;
   hasGoogleAccount?: boolean;
+  paymentTerms: string | null;
+  quoteTerms: string | null;
 }
 
 interface GoogleCalendar {
@@ -70,6 +76,10 @@ export default function ConfiguracoesPage() {
   const [monthlyWorkingHours, setMonthlyWorkingHours] = useState<string>('176');
   const [googleCalendarEnabled, setGoogleCalendarEnabled] = useState(false);
   const [googleCalendarId, setGoogleCalendarId] = useState<string>('primary');
+
+  // Quote settings states
+  const [paymentTerms, setPaymentTerms] = useState<string>('');
+  const [quoteTerms, setQuoteTerms] = useState<string>('');
 
   // Fetch clinic logo
   const fetchLogo = async () => {
@@ -177,6 +187,8 @@ export default function ConfiguracoesPage() {
         setMonthlyWorkingHours(data.monthlyWorkingHours?.toString() || '176');
         setGoogleCalendarEnabled(data.googleCalendarEnabled || false);
         setGoogleCalendarId(data.googleCalendarId || 'primary');
+        setPaymentTerms(data.paymentTerms || '');
+        setQuoteTerms(data.quoteTerms || '');
 
         // Fetch Google calendars if account is connected
         if (data.hasGoogleAccount) {
@@ -214,6 +226,8 @@ export default function ConfiguracoesPage() {
           monthlyWorkingHours: parseFloat(monthlyWorkingHours),
           googleCalendarEnabled,
           googleCalendarId,
+          paymentTerms,
+          quoteTerms,
         }),
       });
 
@@ -376,6 +390,58 @@ export default function ConfiguracoesPage() {
               </div>
             </label>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Quote Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5 text-purple-600" />
+            Configurações de Orçamento
+          </CardTitle>
+          <CardDescription>
+            Defina as formas de pagamento e termos padrão que aparecerão nos PDFs de orçamento
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="paymentTerms" className="flex items-center gap-2">
+              <CreditCard className="h-4 w-4" />
+              Formas de Pagamento
+            </Label>
+            <Textarea
+              id="paymentTerms"
+              value={paymentTerms}
+              onChange={(e) => setPaymentTerms(e.target.value)}
+              placeholder={"Ex: PIX com 5% de desconto\nCartão de crédito em até 12x\nBoleto bancário (à vista)\nDinheiro"}
+              rows={4}
+              className="resize-y"
+            />
+            <p className="text-xs text-gray-500">
+              Informe as formas de pagamento aceitas pela clínica. Este texto será exibido em todos os PDFs de orçamento.
+            </p>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <Label htmlFor="quoteTerms" className="flex items-center gap-2">
+              <ScrollText className="h-4 w-4" />
+              Termos e Condições
+            </Label>
+            <Textarea
+              id="quoteTerms"
+              value={quoteTerms}
+              onChange={(e) => setQuoteTerms(e.target.value)}
+              placeholder={"Ex: Valores sujeitos a alteração sem aviso prévio. Os resultados podem variar de acordo com cada paciente. O orçamento não inclui exames complementares. Cancelamentos devem ser comunicados com 24h de antecedência."}
+              rows={5}
+              className="resize-y"
+            />
+            <p className="text-xs text-gray-500">
+              Defina os termos e condições padrão. Este texto aparecerá em fonte menor no final do PDF de orçamento.
+            </p>
+          </div>
         </CardContent>
       </Card>
 

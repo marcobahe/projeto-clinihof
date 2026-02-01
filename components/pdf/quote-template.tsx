@@ -143,6 +143,39 @@ const styles = StyleSheet.create({
     borderLeft: '3 solid #f59e0b',
     fontSize: 9,
   },
+  paymentTerms: {
+    marginTop: 15,
+    padding: 10,
+    backgroundColor: '#f0fdf4',
+    borderLeft: '3 solid #22c55e',
+  },
+  paymentTermsTitle: {
+    fontWeight: 'bold',
+    marginBottom: 5,
+    color: '#15803d',
+    fontSize: 10,
+  },
+  paymentTermsText: {
+    fontSize: 9,
+    color: '#333',
+    lineHeight: 1.5,
+  },
+  quoteTerms: {
+    marginTop: 15,
+    padding: 10,
+  },
+  quoteTermsTitle: {
+    fontWeight: 'bold',
+    marginBottom: 4,
+    color: '#9ca3af',
+    fontSize: 8,
+    textTransform: 'uppercase',
+  },
+  quoteTermsText: {
+    fontSize: 8,
+    color: '#9ca3af',
+    lineHeight: 1.4,
+  },
 });
 
 interface QuoteItem {
@@ -169,6 +202,8 @@ interface QuoteData {
   finalAmount: number;
   notes?: string;
   leadSource?: string;
+  paymentTerms?: string;
+  quoteTerms?: string;
 }
 
 interface QuoteTemplateProps {
@@ -294,6 +329,14 @@ export const QuoteTemplate: React.FC<QuoteTemplateProps> = ({ data }) => {
           </View>
         )}
 
+        {/* Formas de Pagamento */}
+        {data.paymentTerms && (
+          <View style={styles.paymentTerms}>
+            <Text style={styles.paymentTermsTitle}>FORMAS DE PAGAMENTO</Text>
+            <Text style={styles.paymentTermsText}>{data.paymentTerms}</Text>
+          </View>
+        )}
+
         {/* Aviso de Validade */}
         {data.expirationDate && (
           <View style={styles.validityWarning}>
@@ -301,6 +344,14 @@ export const QuoteTemplate: React.FC<QuoteTemplateProps> = ({ data }) => {
               ⚠️ Este orçamento é válido até {formatDate(data.expirationDate)}. Após esta data,
               os valores e condições podem ser alterados.
             </Text>
+          </View>
+        )}
+
+        {/* Termos e Condições */}
+        {data.quoteTerms && (
+          <View style={styles.quoteTerms}>
+            <Text style={styles.quoteTermsTitle}>TERMOS E CONDIÇÕES</Text>
+            <Text style={styles.quoteTermsText}>{data.quoteTerms}</Text>
           </View>
         )}
 

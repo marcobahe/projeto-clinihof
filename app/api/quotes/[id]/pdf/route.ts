@@ -50,7 +50,7 @@ export async function GET(
     // Buscar logo da clínica
     const workspaceSettings = await prisma.workspaceSettings.findUnique({
       where: { workspaceId: workspace.id },
-      select: { clinicLogo: true },
+      select: { clinicLogo: true, paymentTerms: true, quoteTerms: true },
     });
 
     // Preparar dados para o PDF
@@ -76,6 +76,8 @@ export async function GET(
       finalAmount: quote.finalAmount,
       notes: quote.notes || undefined,
       leadSource: quote.leadSource || undefined,
+      paymentTerms: workspaceSettings?.paymentTerms || undefined,
+      quoteTerms: workspaceSettings?.quoteTerms || undefined,
     };
 
     // Gerar o PDF

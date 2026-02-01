@@ -72,6 +72,8 @@ export async function PUT(request: NextRequest) {
       monthlyWorkingHours,
       googleCalendarEnabled,
       googleCalendarId,
+      paymentTerms,
+      quoteTerms,
     } = body;
 
     // Calculate hourly clinic cost
@@ -91,6 +93,8 @@ export async function PUT(request: NextRequest) {
         ...(hourlyClinicCost !== null && { hourlyClinicCost }),
         ...(googleCalendarEnabled !== undefined && { googleCalendarEnabled }),
         ...(googleCalendarId !== undefined && { googleCalendarId }),
+        ...(paymentTerms !== undefined && { paymentTerms: paymentTerms || null }),
+        ...(quoteTerms !== undefined && { quoteTerms: quoteTerms || null }),
       },
       create: {
         workspaceId: workspace.id,
@@ -99,6 +103,8 @@ export async function PUT(request: NextRequest) {
         hourlyClinicCost,
         googleCalendarEnabled: googleCalendarEnabled || false,
         googleCalendarId: googleCalendarId || null,
+        paymentTerms: paymentTerms || null,
+        quoteTerms: quoteTerms || null,
       },
     });
 
