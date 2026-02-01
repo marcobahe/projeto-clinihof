@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
       role: user.role,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
-      workspace: user.workspace,
+      workspaces: user.workspace ? [user.workspace] : [],
       lastLogin: user.sessions[0]?.expires || null
     }))
 
