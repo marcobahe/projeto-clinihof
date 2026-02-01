@@ -171,11 +171,8 @@ export default function LoginPage() {
       </Button>
 
       <div className="mt-6 text-center">
-        <p className="text-sm text-gray-600 dark:text-gray-400 dark:text-gray-400">
-          Não tem uma conta?{' '}
-          <Link href="/signup" className="text-purple-600 hover:text-purple-700 font-semibold">
-            Criar conta
-          </Link>
+        <p className="text-xs text-gray-500 dark:text-gray-500">
+          O cadastro de novas contas é feito pelo administrador.
         </p>
       </div>
     </div>
