@@ -33,7 +33,7 @@ import { ThemeToggle } from './theme-toggle';
 import { useEffect, useState } from 'react';
 
 const getAllMenuItems = () => [
-  { key: 'dashboard', name: 'Painel', href: '/admin', icon: LayoutDashboard },
+  { key: 'dashboard', name: 'Painel', href: '/dashboard', icon: LayoutDashboard },
   { key: 'agenda', name: 'Agenda', href: '/agenda', icon: Calendar },
   { key: 'patients', name: 'Pacientes', href: '/patients', icon: Users },
   { key: 'quotes', name: 'Orçamentos', href: '/quotes', icon: FileText },

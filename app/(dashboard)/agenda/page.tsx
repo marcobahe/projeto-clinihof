@@ -1055,52 +1055,6 @@ export default function AgendaPage() {
         </div>
       </div>
 
-      {/* Legenda de Classificação de Consultas - oculta no mobile */}
-      {!isMobile && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Classificação Visual de Consultas</CardTitle>
-            <CardDescription>
-              Identifique rapidamente o tipo de cada consulta através das cores na borda esquerda
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="flex items-start gap-3 p-3 rounded-lg border-l-4 border-red-500 bg-red-50 dark:bg-red-900/10">
-                <div>
-                  <div className="font-semibold text-red-800 dark:text-red-400 mb-1">
-                    🔴 Primeira Consulta
-                  </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                    Paciente novo em processo de conversão e diagnóstico inicial
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 p-3 rounded-lg border-l-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-900/10">
-                <div>
-                  <div className="font-semibold text-yellow-800 dark:text-yellow-400 mb-1">
-                    🟡 Pendência Financeira
-                  </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                    Consulta com cobrança em aberto ou pagamento pendente
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 p-3 rounded-lg border-l-4 border-green-500 bg-green-50 dark:bg-green-900/10">
-                <div>
-                  <div className="font-semibold text-green-800 dark:text-green-400 mb-1">
-                    🟢 Retorno/Acompanhamento
-                  </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                    Consulta de retorno para continuidade do tratamento
-                  </div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Controles do Calendário */}
       <Card>
         <CardContent className="p-3 sm:p-4">
