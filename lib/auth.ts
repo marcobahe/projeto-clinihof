@@ -77,17 +77,23 @@ export const authOptions: NextAuthOptions = {
       if (session?.user && token.id) {
         (session.user as any).id = token.id;
         
-        // Always fetch fresh user data to get current role
+        // Always fetch fresh user data to get current role and name
         try {
           const currentUser = await prisma.user.findUnique({
             where: { id: token.id as string },
-            select: { role: true }
+            select: { role: true, name: true, image: true }
           });
           
-          // Use current role from database, fallback to token role
+          // Use current data from database, fallback to token values
           (session.user as any).role = currentUser?.role || token.role || 'USER';
+          if (currentUser?.name) {
+            session.user.name = currentUser.name;
+          }
+          if (currentUser?.image !== undefined) {
+            session.user.image = currentUser.image;
+          }
         } catch (error) {
-          console.error('Error fetching user role:', error);
+          console.error('Error fetching user data:', error);
           // Fallback to token role if database query fails
           (session.user as any).role = token.role || 'USER';
         }
