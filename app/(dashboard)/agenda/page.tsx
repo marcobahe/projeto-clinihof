@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, addWeeks, isSameDay, isSameMonth, startOfDay, endOfDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, User, Edit2, Check, X, Plus, CalendarPlus, ListFilter, Tag as TagIcon, Filter, Eye, EyeOff } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Clock, User, Edit2, Check, X, Plus, CalendarPlus, ListFilter, Tag as TagIcon, Filter, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -145,6 +145,21 @@ const appointmentTypeDescriptions = {
   FOLLOW_UP: 'Consulta de retorno - Acompanhamento',
 };
 
+// Helper to format last sync time as relative time
+function formatSyncTime(date: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+
+  if (diffMin < 1) return 'agora';
+  if (diffMin === 1) return 'há 1 min';
+  if (diffMin < 60) return `há ${diffMin} min`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours === 1) return 'há 1 hora';
+  if (diffHours < 24) return `há ${diffHours} horas`;
+  return format(date, "dd/MM HH:mm");
+}
+
 export default function AgendaPage() {
   const isMobile = useIsMobile();
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -173,6 +188,11 @@ export default function AgendaPage() {
   // Refresh key - incrementado após mutações para forçar refetch
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // Google Calendar polling states
+  const [googleCalendarEnabled, setGoogleCalendarEnabled] = useState(false);
+  const [lastGoogleSync, setLastGoogleSync] = useState<Date | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+
   // Estados para criação de agendamento
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createModalDate, setCreateModalDate] = useState<Date | undefined>(undefined);
@@ -198,6 +218,68 @@ export default function AgendaPage() {
       setHasSetInitialView(true);
     }
   }, [isMobile, hasSetInitialView]);
+
+  // Check if Google Calendar is enabled in workspace settings
+  useEffect(() => {
+    const checkGoogleCalendarSettings = async () => {
+      try {
+        const response = await fetch('/api/settings', { cache: 'no-store' });
+        if (response.ok) {
+          const data = await response.json();
+          setGoogleCalendarEnabled(!!data.googleCalendarEnabled && !!data.googleCalendarId);
+          if (data.lastGoogleSync) {
+            setLastGoogleSync(new Date(data.lastGoogleSync));
+          }
+        }
+      } catch {
+        // Silently ignore - polling won't start if we can't check
+      }
+    };
+    checkGoogleCalendarSettings();
+  }, []);
+
+  // Google Calendar polling - every 5 minutes
+  useEffect(() => {
+    if (!googleCalendarEnabled) return;
+
+    const pollGoogleCalendar = async () => {
+      try {
+        setIsSyncing(true);
+        const now = new Date();
+        const startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 days ago
+        const endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days ahead
+
+        const response = await fetch('/api/google-calendar/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'pull',
+            startDate: startDate.toISOString(),
+            endDate: endDate.toISOString(),
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setLastGoogleSync(new Date());
+          // If changes were synced, refresh the calendar view
+          if (data.synced > 0) {
+            setRefreshKey((k) => k + 1);
+          }
+        }
+      } catch {
+        // Silently ignore errors - will retry next cycle
+      } finally {
+        setIsSyncing(false);
+      }
+    };
+
+    // Run immediately on mount, then every 5 minutes
+    pollGoogleCalendar();
+    const intervalId = setInterval(pollGoogleCalendar, 5 * 60 * 1000);
+
+    return () => clearInterval(intervalId);
+  }, [googleCalendarEnabled]);
 
   // Buscar tags para o filtro
   const fetchTags = useCallback(async () => {
@@ -1015,6 +1097,14 @@ export default function AgendaPage() {
           <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">
             Gerencie seus agendamentos e eventos
           </p>
+          {googleCalendarEnabled && lastGoogleSync && (
+            <div className="flex items-center gap-1.5 mt-1">
+              <RefreshCw className={`h-3 w-3 text-gray-400 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span className="text-xs text-gray-400">
+                Google Calendar: sync {formatSyncTime(lastGoogleSync)}
+              </span>
+            </div>
+          )}
         </div>
         <div className="flex gap-2 flex-wrap">
           {!isMobile && (

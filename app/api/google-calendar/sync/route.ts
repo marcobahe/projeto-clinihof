@@ -7,7 +7,7 @@ import { syncSessionToGoogleCalendar, syncFromGoogleCalendar } from '@/lib/googl
 
 export const dynamic = 'force-dynamic';
 
-// POST /api/google-calendar/sync - Sync a specific session or all sessions
+// POST /api/google-calendar/sync - Sync a specific session, all sessions, or pull from Google
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -23,6 +23,17 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { sessionId, action, syncAll } = body;
+
+    // Pull events from Google Calendar into CliniHOF
+    if (action === 'pull') {
+      const startDate = body.startDate ? new Date(body.startDate) : new Date();
+      const endDate = body.endDate
+        ? new Date(body.endDate)
+        : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+      const result = await syncFromGoogleCalendar(userId, workspace.id, startDate, endDate);
+      return NextResponse.json(result);
+    }
 
     // Sync all sessions to Google Calendar
     if (syncAll) {
