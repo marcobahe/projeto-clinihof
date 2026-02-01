@@ -170,6 +170,9 @@ export default function AgendaPage() {
   const [editAppointmentType, setEditAppointmentType] = useState<AppointmentType | null>(null);
   const [editNotes, setEditNotes] = useState('');
 
+  // Refresh key - incrementado após mutações para forçar refetch
+  const [refreshKey, setRefreshKey] = useState(0);
+
   // Estados para criação de agendamento
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createModalDate, setCreateModalDate] = useState<Date | undefined>(undefined);
@@ -199,7 +202,7 @@ export default function AgendaPage() {
   // Buscar tags para o filtro
   const fetchTags = useCallback(async () => {
     try {
-      const response = await fetch('/api/tags');
+      const response = await fetch('/api/tags', { cache: 'no-store' });
       if (response.ok) {
         const data: TagWithCount[] = await response.json();
         setTags(data);
@@ -264,8 +267,7 @@ export default function AgendaPage() {
 
   // Callback quando agendamento é criado com sucesso
   const handleAppointmentCreated = () => {
-    fetchAppointments();
-    fetchMonthStats();
+    setRefreshKey((k) => k + 1);
   };
 
   // Abrir modal de evento do calendário ao clicar em um dia
@@ -288,8 +290,7 @@ export default function AgendaPage() {
 
   // Callback quando evento é criado/editado com sucesso
   const handleEventSuccess = () => {
-    fetchCalendarEvents();
-    fetchTags(); // Atualizar contadores de tags
+    setRefreshKey((k) => k + 1);
   };
 
   // Buscar eventos do calendário
@@ -314,7 +315,7 @@ export default function AgendaPage() {
         endDate: endDate.toISOString(),
       });
 
-      const response = await fetch(`/api/calendar-events?${params}`);
+      const response = await fetch(`/api/calendar-events?${params}`, { cache: 'no-store' });
       if (response.ok) {
         const data = await response.json();
         setCalendarEvents(data);
@@ -360,7 +361,7 @@ export default function AgendaPage() {
         view: viewMode,
       });
 
-      const response = await fetch(`/api/agenda?${params}`);
+      const response = await fetch(`/api/agenda?${params}`, { cache: 'no-store' });
       if (!response.ok) throw new Error('Erro ao buscar agendamentos');
       
       const data = await response.json();
@@ -384,7 +385,7 @@ export default function AgendaPage() {
         endDate: endDate.toISOString(),
       });
 
-      const response = await fetch(`/api/agenda/stats?${params}`);
+      const response = await fetch(`/api/agenda/stats?${params}`, { cache: 'no-store' });
       if (!response.ok) throw new Error('Erro ao buscar estatísticas');
       
       const data = await response.json();
@@ -399,7 +400,8 @@ export default function AgendaPage() {
     fetchAppointments();
     fetchMonthStats();
     fetchCalendarEvents();
-  }, [currentDate, viewMode]);
+    fetchTags();
+  }, [currentDate, viewMode, refreshKey]);
 
   // Navegação de período
   const handlePrevious = () => {
@@ -495,8 +497,7 @@ export default function AgendaPage() {
 
       toast.success('Agendamento atualizado com sucesso!');
       setIsEditDialogOpen(false);
-      fetchAppointments();
-      fetchMonthStats();
+      setRefreshKey((k) => k + 1);
     } catch (error) {
       console.error('Error updating appointment:', error);
       toast.error('Erro ao atualizar agendamento');
@@ -1461,8 +1462,7 @@ export default function AgendaPage() {
         isOpen={isTagManagerOpen}
         onClose={() => setIsTagManagerOpen(false)}
         onTagsChanged={() => {
-          fetchCalendarEvents();
-          fetchTags();
+          setRefreshKey((k) => k + 1);
         }}
       />
     </div>
