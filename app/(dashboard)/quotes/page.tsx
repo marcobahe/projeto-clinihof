@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, TrendingUp, DollarSign, CheckCircle, XCircle, Clock, FileText, Search, Filter, Download } from 'lucide-react';
+import { Plus, TrendingUp, DollarSign, CheckCircle, XCircle, Clock, FileText, Search, Filter, Download, Settings } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { formatCurrency, formatNumber } from '@/lib/utils';
 import { useCountUp } from '@/hooks/use-count-up';
+import { QuoteSettingsModal } from '@/components/quote-settings-modal';
 
 interface Patient {
   id: string;
@@ -89,6 +90,7 @@ export default function QuotesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
 
   // Form state for creating quote
@@ -397,6 +399,15 @@ export default function QuotesPage() {
           <h1 className="text-3xl font-bold tracking-tight">Orçamentos</h1>
           <p className="text-muted-foreground">Gerencie propostas e acompanhe conversões</p>
         </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setIsSettingsModalOpen(true)}
+            title="Configurações de Orçamento"
+          >
+            <Settings className="h-4 w-4 mr-2" />
+            Configurações
+          </Button>
         <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
           <DialogTrigger asChild>
             <Button className="bg-purple-600 hover:bg-purple-700">
@@ -586,7 +597,11 @@ export default function QuotesPage() {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
+
+      {/* Quote Settings Modal */}
+      <QuoteSettingsModal open={isSettingsModalOpen} onOpenChange={setIsSettingsModalOpen} />
 
       {/* Stats Cards */}
       {stats && (
