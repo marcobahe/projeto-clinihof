@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { getUserWorkspace } from '@/lib/workspace';
 import { prisma } from '@/lib/db';
+import { syncSessionToGoogleCalendar } from '@/lib/google-calendar';
 
 // PATCH /api/sessions/[id]/complete - Mark session as completed
 export async function PATCH(
@@ -45,6 +46,10 @@ export async function PATCH(
         completedDate: new Date(),
       },
     });
+
+    // Fire-and-forget: sync to Google Calendar (update the event to reflect completed status)
+    syncSessionToGoogleCalendar((session.user as any).id, id, 'update')
+      .catch((err) => console.error('[GoogleCalendar] Sync error (complete):', err));
 
     return NextResponse.json(updatedSession);
   } catch (error) {

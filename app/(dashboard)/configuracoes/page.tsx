@@ -10,7 +10,8 @@ import {
   RefreshCw,
   Check,
   AlertCircle,
-  ExternalLink
+  ExternalLink,
+  Loader2
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,6 +20,13 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { toast } from 'sonner';
 
 interface WorkspaceSettings {
@@ -33,17 +41,43 @@ interface WorkspaceSettings {
   hasGoogleAccount?: boolean;
 }
 
+interface GoogleCalendar {
+  id: string;
+  summary: string;
+  description: string | null;
+  primary: boolean;
+  backgroundColor: string | null;
+}
+
 export default function ConfiguracoesPage() {
   const [settings, setSettings] = useState<WorkspaceSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [loadingCalendars, setLoadingCalendars] = useState(false);
+  const [googleCalendars, setGoogleCalendars] = useState<GoogleCalendar[]>([]);
 
   // Form states
   const [monthlyFixedCosts, setMonthlyFixedCosts] = useState<string>('0');
   const [monthlyWorkingHours, setMonthlyWorkingHours] = useState<string>('176');
   const [googleCalendarEnabled, setGoogleCalendarEnabled] = useState(false);
   const [googleCalendarId, setGoogleCalendarId] = useState<string>('primary');
+
+  // Fetch Google calendars
+  const fetchGoogleCalendars = async () => {
+    try {
+      setLoadingCalendars(true);
+      const response = await fetch('/api/google-calendar/calendars');
+      if (response.ok) {
+        const data = await response.json();
+        setGoogleCalendars(data.calendars || []);
+      }
+    } catch (error) {
+      console.error('Error fetching Google calendars:', error);
+    } finally {
+      setLoadingCalendars(false);
+    }
+  };
 
   // Fetch settings
   const fetchSettings = async () => {
@@ -57,6 +91,11 @@ export default function ConfiguracoesPage() {
         setMonthlyWorkingHours(data.monthlyWorkingHours?.toString() || '176');
         setGoogleCalendarEnabled(data.googleCalendarEnabled || false);
         setGoogleCalendarId(data.googleCalendarId || 'primary');
+
+        // Fetch Google calendars if account is connected
+        if (data.hasGoogleAccount) {
+          fetchGoogleCalendars();
+        }
       }
     } catch (error) {
       console.error('Error fetching settings:', error);
@@ -303,18 +342,52 @@ export default function ConfiguracoesPage() {
               />
             </div>
 
-            {/* Calendar ID */}
+            {/* Calendar Selection */}
             <div className="space-y-2">
-              <Label htmlFor="googleCalendarId">ID do Calendário</Label>
-              <Input
-                id="googleCalendarId"
-                value={googleCalendarId}
-                onChange={(e) => setGoogleCalendarId(e.target.value)}
-                placeholder="primary"
-                disabled={!settings?.hasGoogleAccount}
-              />
+              <Label htmlFor="googleCalendarId">Calendário</Label>
+              {loadingCalendars ? (
+                <div className="flex items-center gap-2 text-sm text-gray-500 py-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Carregando calendários...
+                </div>
+              ) : googleCalendars.length > 0 ? (
+                <Select
+                  value={googleCalendarId}
+                  onValueChange={setGoogleCalendarId}
+                  disabled={!settings?.hasGoogleAccount}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um calendário" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {googleCalendars.map((cal) => (
+                      <SelectItem key={cal.id} value={cal.id || 'primary'}>
+                        <div className="flex items-center gap-2">
+                          {cal.backgroundColor && (
+                            <span
+                              className="inline-block w-3 h-3 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: cal.backgroundColor }}
+                            />
+                          )}
+                          <span>{cal.summary}{cal.primary ? ' (Principal)' : ''}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  id="googleCalendarId"
+                  value={googleCalendarId}
+                  onChange={(e) => setGoogleCalendarId(e.target.value)}
+                  placeholder="primary"
+                  disabled={!settings?.hasGoogleAccount}
+                />
+              )}
               <p className="text-xs text-gray-500">
-                Use "primary" para o calendário principal ou o ID de um calendário específico
+                {googleCalendars.length > 0
+                  ? 'Selecione o calendário onde os agendamentos serão sincronizados'
+                  : 'Use "primary" para o calendário principal ou o ID de um calendário específico'}
               </p>
             </div>
 

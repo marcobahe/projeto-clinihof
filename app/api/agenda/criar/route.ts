@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { getUserWorkspace } from '@/lib/workspace';
 import { prisma } from '@/lib/db';
+import { syncSessionToGoogleCalendar } from '@/lib/google-calendar';
 
 export const dynamic = 'force-dynamic';
 
@@ -95,6 +96,10 @@ export async function POST(request: NextRequest) {
           procedure: true,
         },
       });
+
+      // Fire-and-forget: sync to Google Calendar
+      syncSessionToGoogleCalendar((session.user as any).id, updatedSession.id, 'create')
+        .catch((err) => console.error('[GoogleCalendar] Sync error (create existing):', err));
 
       return NextResponse.json({
         success: true,
@@ -206,6 +211,10 @@ export async function POST(request: NextRequest) {
         procedure: true,
       },
     });
+
+    // Fire-and-forget: sync to Google Calendar
+    syncSessionToGoogleCalendar((session.user as any).id, newSession.id, 'create')
+      .catch((err) => console.error('[GoogleCalendar] Sync error (create new):', err));
 
     return NextResponse.json({
       success: true,

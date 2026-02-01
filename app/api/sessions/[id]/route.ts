@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { getUserWorkspace } from '@/lib/workspace';
+import { syncSessionToGoogleCalendar } from '@/lib/google-calendar';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,6 +65,14 @@ export async function PATCH(
       where: { id: params.id },
       data: updateData,
     });
+
+    // Fire-and-forget: sync to Google Calendar
+    // Determine action: if status changed to CANCELLED or scheduledDate removed, delete; otherwise update
+    const syncAction = (status === 'CANCELLED' || (scheduledDate === null && !updatedSession.scheduledDate))
+      ? 'delete' as const
+      : (existingSession.googleEventId ? 'update' as const : 'create' as const);
+    syncSessionToGoogleCalendar((session.user as any).id, params.id, syncAction)
+      .catch((err) => console.error('[GoogleCalendar] Sync error (session update):', err));
 
     return NextResponse.json(updatedSession);
   } catch (error) {

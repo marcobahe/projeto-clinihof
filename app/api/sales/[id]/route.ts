@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { getUserWorkspace } from '@/lib/workspace';
 import { prisma } from '@/lib/db';
+import { syncSessionToGoogleCalendar } from '@/lib/google-calendar';
 
 export const dynamic = 'force-dynamic';
 
@@ -111,6 +112,17 @@ export async function DELETE(
 
     if (!existingSale) {
       return NextResponse.json({ error: 'Sale not found' }, { status: 404 });
+    }
+
+    // Fire-and-forget: delete Google Calendar events for all sessions with googleEventId
+    const sessionsWithGoogleEvent = await prisma.procedureSession.findMany({
+      where: { saleId: params.id, googleEventId: { not: null } },
+      select: { id: true },
+    });
+    const userId = (session.user as any).id;
+    for (const sess of sessionsWithGoogleEvent) {
+      syncSessionToGoogleCalendar(userId, sess.id, 'delete')
+        .catch((err) => console.error('[GoogleCalendar] Sync error (sale delete):', err));
     }
 
     // Delete related sessions first
