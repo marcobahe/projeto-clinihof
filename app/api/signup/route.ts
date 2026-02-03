@@ -1,24 +1,11 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import { seedWorkspaceData } from '@/lib/seed-workspace';
-import { UserRole } from '@prisma/client';
 
 export async function POST(req: NextRequest) {
   try {
-    // Check if request is from an authenticated MASTER user
-    const session = await getServerSession(authOptions);
-    
-    if (!session || !session.user || (session.user as any).role !== UserRole.MASTER) {
-      return NextResponse.json(
-        { error: 'Cadastro público desabilitado. Apenas o administrador master pode criar contas.' },
-        { status: 403 }
-      );
-    }
-
     const body = await req.json();
     const { email, password, fullName, clinicName, plan } = body;
 
