@@ -20,6 +20,9 @@ export const PERMISSIONS = {
   // Insumos - mesmas permissões que procedimentos
   supplies: ['MASTER', 'ADMIN', 'MANAGER', 'RECEPTIONIST'],
   
+  // Pacotes - mesmas permissões que procedimentos
+  packages: ['MASTER', 'ADMIN', 'MANAGER', 'RECEPTIONIST'],
+  
   // Colaboradores - apenas níveis superiores
   collaborators: ['MASTER', 'ADMIN', 'MANAGER'],
   
