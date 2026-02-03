@@ -38,6 +38,7 @@ const getAllMenuItems = () => [
   { key: 'patients', name: 'Pacientes', href: '/patients', icon: Users },
   { key: 'quotes', name: 'Orçamentos', href: '/quotes', icon: FileText },
   { key: 'procedures', name: 'Procedimentos', href: '/procedures', icon: Stethoscope },
+  { key: 'supplies', name: 'Insumos', href: '/supplies', icon: Package },
   { key: 'collaborators', name: 'Colaboradores', href: '/collaborators', icon: UsersRound },
   { key: 'sales', name: 'Vendas', href: '/appointments', icon: DollarSign },
   { key: 'commissions', name: 'Comissões', href: '/comissoes', icon: Percent },

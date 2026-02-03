@@ -17,6 +17,9 @@ export const PERMISSIONS = {
   // Procedimentos - RECEPTIONIST só visualizar  
   procedures: ['MASTER', 'ADMIN', 'MANAGER', 'RECEPTIONIST'],
   
+  // Insumos - mesmas permissões que procedimentos
+  supplies: ['MASTER', 'ADMIN', 'MANAGER', 'RECEPTIONIST'],
+  
   // Colaboradores - apenas níveis superiores
   collaborators: ['MASTER', 'ADMIN', 'MANAGER'],
   
