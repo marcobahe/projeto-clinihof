@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Search, User, Phone, Mail, Loader2, Edit, Trash2, Eye } from 'lucide-react';
+import { Plus, Search, User, Phone, Mail, Loader2, Edit, Trash2, Eye, FileSpreadsheet } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import {
@@ -16,6 +16,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { PatientForm } from '@/components/forms/patient-form';
+import { PatientCSVImport } from '@/components/patients/patient-csv-import';
 
 interface Patient {
   id: string;
@@ -33,6 +34,7 @@ export default function PatientsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   const fetchPatients = async () => {
     try {
@@ -109,16 +111,24 @@ export default function PatientsPage() {
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">Pacientes</h1>
           <p className="text-gray-600 dark:text-gray-400 mt-1">Gerencie seus pacientes</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button
-              className="bg-purple-600 hover:bg-purple-700"
-              onClick={() => setEditingPatient(null)}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Novo Paciente
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setIsImportModalOpen(true)}
+          >
+            <FileSpreadsheet className="mr-2 h-4 w-4" />
+            <span className="hidden sm:inline">Importar CSV</span>
+          </Button>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button
+                className="bg-purple-600 hover:bg-purple-700"
+                onClick={() => setEditingPatient(null)}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Novo Paciente
+              </Button>
+            </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>
@@ -128,7 +138,16 @@ export default function PatientsPage() {
             <PatientForm patient={editingPatient} onSuccess={handleSuccess} />
           </DialogContent>
         </Dialog>
+        </div>
       </div>
+
+      {/* Modal de Importação CSV */}
+      {isImportModalOpen && (
+        <PatientCSVImport
+          onSuccess={fetchPatients}
+          onClose={() => setIsImportModalOpen(false)}
+        />
+      )}
 
       <Card className="mb-6">
         <CardContent className="pt-6">
