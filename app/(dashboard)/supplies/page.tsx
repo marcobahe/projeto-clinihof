@@ -97,8 +97,8 @@ export default function SuppliesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.name || !formData.costPerUnit || !formData.stockQty || !formData.minStock) {
-      toast.error('Preencha todos os campos obrigatórios');
+    if (!formData.name || !formData.costPerUnit) {
+      toast.error('Preencha nome e custo por unidade');
       return;
     }
 
@@ -481,26 +481,29 @@ export default function SuppliesPage() {
                     </div>
 
                     <div>
-                      <Label htmlFor="stockQty">Quantidade em Estoque *</Label>
+                      <Label htmlFor="stockQty">Quantidade em Estoque</Label>
                       <Input
                         id="stockQty"
                         type="number"
                         step="0.01"
                         value={formData.stockQty}
                         onChange={(e) => setFormData({ ...formData, stockQty: e.target.value })}
-                        placeholder="0"
+                        placeholder="0 (opcional)"
                       />
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Deixe em branco ou 0 se não deseja controlar estoque
+                      </p>
                     </div>
 
                     <div>
-                      <Label htmlFor="minStock">Estoque Mínimo *</Label>
+                      <Label htmlFor="minStock">Estoque Mínimo</Label>
                       <Input
                         id="minStock"
                         type="number"
                         step="0.01"
                         value={formData.minStock}
                         onChange={(e) => setFormData({ ...formData, minStock: e.target.value })}
-                        placeholder="0"
+                        placeholder="0 (opcional)"
                       />
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         Você será alertado quando o estoque atingir este nível

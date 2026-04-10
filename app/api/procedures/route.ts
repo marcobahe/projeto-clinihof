@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { name, price, duration, fixedCost, color, supplies, collaborators } = body;
+    const { name, price, duration, fixedCost, color, supplies, collaborators, description, sessionCount, timePerSession } = body;
 
     if (!name || price === undefined) {
       return NextResponse.json(
@@ -116,6 +116,9 @@ export async function POST(req: NextRequest) {
         duration: parseInt(duration) || 0,
         fixedCost: fixedCost ? parseFloat(fixedCost) : 0,
         color: color || null,
+        description: description || null,
+        sessionCount: sessionCount ? parseInt(sessionCount) : 1,
+        timePerSession: timePerSession ? parseInt(timePerSession) : null,
         supplies: supplies?.length > 0 ? {
           create: supplies.map((s: { supplyId: string; quantity: number }) => ({
             supplyId: s.supplyId,

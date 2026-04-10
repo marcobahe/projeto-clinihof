@@ -67,6 +67,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Permitir cadastrar insumo sem estoque (stockQty pode ser 0 ou omitido)
+
     // Check for duplicate supply
     const existingSupply = await prisma.supply.findUnique({
       where: {
@@ -91,8 +93,8 @@ export async function POST(request: NextRequest) {
         name,
         unit,
         costPerUnit: parseFloat(costPerUnit) || 0,
-        stockQty: parseInt(stockQty) || 0,
-        minStock: parseInt(minStock) || 0,
+        stockQty: stockQty !== undefined && stockQty !== null ? parseInt(stockQty) : 0,
+        minStock: minStock !== undefined && minStock !== null ? parseInt(minStock) : 0,
       },
     });
 

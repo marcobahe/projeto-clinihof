@@ -121,9 +121,26 @@ model Supply {
   
   workspace    Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   procedures   ProcedureSupply[]
+  conversions  SupplyConversion[]   // Conversões de unidade (fracionamento)
   
   @@unique([workspaceId, name, unit]) // Evita duplicação de insumos com mesmo nome + unidade
   @@index([workspaceId])
+}
+
+// Conversão de unidades para fracionamento de insumos
+// Ex: 1 frasco = 50 aplicações (factor = 50, fromUnit = "frasco", toUnit = "aplicação")
+model SupplyConversion {
+  id           String   @id @default(cuid())
+  supplyId     String
+  fromUnit     String   // Unidade de origem (ex: "frasco")
+  toUnit       String   // Unidade de destino (ex: "aplicação")
+  factor       Float    // Fator de conversão (ex: 50 → 1 frasco = 50 aplicações)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  supply       Supply   @relation(fields: [supplyId], references: [id], onDelete: Cascade)
+  
+  @@index([supplyId])
 }
 
 // Enum for commission type
@@ -193,6 +210,7 @@ model ProcedureCollaborator {
   procedureId    String
   collaboratorId String
   timeMinutes    Int          // Tempo em minutos gasto pelo profissional
+  fixedPayment   Float?       // Pagamento fixo por procedimento (R$) — sobrepõe cálculo por hora
   
   procedure      Procedure    @relation(fields: [procedureId], references: [id], onDelete: Cascade)
   collaborator   Collaborator @relation(fields: [collaboratorId], references: [id], onDelete: Cascade)
@@ -242,10 +260,13 @@ model Procedure {
   name        String
   price       Float    // Preço de venda em R$
   duration    Int      // Duração média em minutos
-  fixedCost   Float?   @default(0) // Custo fixo do procedimento em R$
-  color       String?  // Cor para exibição no calendário (hex code)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  fixedCost      Float?   @default(0) // Custo fixo do procedimento em R$
+  color          String?  // Cor para exibição no calendário (hex code)
+  description    String?  @db.Text // Descrição detalhada do procedimento
+  sessionCount   Int      @default(1) // Número de sessões incluídas
+  timePerSession Int?     // Tempo por sessão em minutos
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
   
   workspace      Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   saleItems      SaleItem[]

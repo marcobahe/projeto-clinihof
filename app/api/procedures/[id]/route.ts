@@ -83,7 +83,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     }
 
     const body = await req.json();
-    const { name, price, duration, fixedCost, color, supplies, collaborators } = body;
+    const { name, price, duration, fixedCost, color, supplies, collaborators, description, sessionCount, timePerSession } = body;
 
     if (!name || price === undefined) {
       return NextResponse.json(
@@ -111,6 +111,9 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
           duration: parseInt(duration) || 0,
           fixedCost: fixedCost !== undefined ? parseFloat(fixedCost) || 0 : undefined,
           color: color !== undefined ? (color || null) : undefined,
+          description: description !== undefined ? (description || null) : undefined,
+          sessionCount: sessionCount !== undefined ? (parseInt(sessionCount) || 1) : undefined,
+          timePerSession: timePerSession !== undefined ? (parseInt(timePerSession) || null) : undefined,
           supplies: supplies?.length > 0 ? {
             create: supplies.map((s: { supplyId: string; quantity: number }) => ({
               supplyId: s.supplyId,
@@ -118,9 +121,10 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
             })),
           } : undefined,
           collaborators: collaborators?.length > 0 ? {
-            create: collaborators.map((c: { collaboratorId: string; timeMinutes: number }) => ({
+            create: collaborators.map((c: { collaboratorId: string; timeMinutes: number; fixedPayment?: number }) => ({
               collaboratorId: c.collaboratorId,
               timeMinutes: c.timeMinutes,
+              fixedPayment: c.fixedPayment || null,
             })),
           } : undefined,
         },
@@ -174,7 +178,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     }
 
     const body = await req.json();
-    const { name, price, duration, color, supplies, collaborators } = body;
+    const { name, price, duration, color, supplies, collaborators, description, sessionCount, timePerSession } = body;
 
     // Update procedure and manage relations in a transaction
     const procedure = await prisma.$transaction(async (tx) => {
@@ -194,6 +198,9 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
           ...(price !== undefined && { price: parseFloat(price) }),
           ...(duration !== undefined && { duration: parseInt(duration) || 0 }),
           ...(color !== undefined && { color: color || null }),
+          ...(description !== undefined && { description: description || null }),
+          ...(sessionCount !== undefined && { sessionCount: parseInt(sessionCount) || 1 }),
+          ...(timePerSession !== undefined && { timePerSession: parseInt(timePerSession) || null }),
           supplies: supplies?.length > 0 ? {
             create: supplies.map((s: { supplyId: string; quantity: number }) => ({
               supplyId: s.supplyId,
@@ -201,9 +208,10 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
             })),
           } : undefined,
           collaborators: collaborators?.length > 0 ? {
-            create: collaborators.map((c: { collaboratorId: string; timeMinutes: number }) => ({
+            create: collaborators.map((c: { collaboratorId: string; timeMinutes: number; fixedPayment?: number }) => ({
               collaboratorId: c.collaboratorId,
               timeMinutes: c.timeMinutes,
+              fixedPayment: c.fixedPayment || null,
             })),
           } : undefined,
         },

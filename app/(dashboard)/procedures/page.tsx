@@ -174,7 +174,7 @@ export default function ProceduresPage() {
   }, []);
 
   const resetForm = () => {
-    setFormData({ name: '', price: '', duration: '' });
+    setFormData({ name: '', price: '', duration: '', description: '', sessionCount: '', timePerSession: '' });
     setSelectedSupplies([]);
     setSelectedCollaborators([]);
     setTempSupply({ supplyId: '', quantity: '1' });
@@ -421,6 +421,9 @@ export default function ProceduresPage() {
           ...formData,
           price: parseFloat(formData.price),
           duration: parseInt(formData.duration) || 0,
+          description: (formData as any).description || null,
+          sessionCount: (formData as any).sessionCount ? parseInt((formData as any).sessionCount) : 1,
+          timePerSession: (formData as any).timePerSession ? parseInt((formData as any).timePerSession) : null,
           supplies: selectedSupplies.map((s) => ({
             supplyId: s.supplyId,
             quantity: s.quantity,
@@ -428,6 +431,7 @@ export default function ProceduresPage() {
           collaborators: selectedCollaborators.map((c) => ({
             collaboratorId: c.collaboratorId,
             timeMinutes: c.timeMinutes,
+            fixedPayment: (c as any).fixedPayment ? parseFloat((c as any).fixedPayment) : null,
           })),
         }),
       });
@@ -529,7 +533,7 @@ export default function ProceduresPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Duração (min)</Label>
+                    <Label>Duração Total (min)</Label>
                     <Input
                       type="number"
                       min="0"
@@ -537,6 +541,47 @@ export default function ProceduresPage() {
                       value={formData.duration}
                       onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
                     />
+                  </div>
+                </div>
+
+                {/* Novos campos: Descrição, Sessões, Tempo por Sessão */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Descrição (o que está incluso)</Label>
+                    <textarea
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[80px]"
+                      placeholder="Descreva o que está incluso no procedimento..."
+                      value={(formData as any).description || ''}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value } as any)}
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Número de Sessões</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        placeholder="1"
+                        value={(formData as any).sessionCount || ''}
+                        onChange={(e) => setFormData({ ...formData, sessionCount: e.target.value } as any)}
+                      />
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        Quantas sessões estão inclusas neste procedimento
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Tempo por Sessão (min)</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder="Ex: 30"
+                        value={(formData as any).timePerSession || ''}
+                        onChange={(e) => setFormData({ ...formData, timePerSession: e.target.value } as any)}
+                      />
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        Se preenchido, será usado ao invés da duração total no agendamento
+                      </p>
+                    </div>
                   </div>
                 </div>
 
@@ -548,7 +593,7 @@ export default function ProceduresPage() {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Markup sobre Custo (%)</Label>
+                      <Label>Margem de Lucro (%)</Label>
                       <Input
                         type="text"
                         placeholder="Ex: 50,0"
@@ -561,7 +606,7 @@ export default function ProceduresPage() {
                         className="border-purple-300 dark:border-purple-700"
                       />
                       <p className="text-xs text-gray-600 dark:text-gray-400">
-                        💡 Ajuste o markup % e o preço será calculado automaticamente
+                        💡 Margem sobre o preço de venda. Ex: 50% = metade do preço é lucro
                       </p>
                     </div>
                     <div className="space-y-2">
