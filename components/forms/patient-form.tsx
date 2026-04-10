@@ -45,6 +45,11 @@ export function PatientForm({ patient, onSuccess }: PatientFormProps) {
     phone: patient?.phone ?? '',
     birthday: patient?.birthday ? format(new Date(patient.birthday), 'yyyy-MM-dd') : '',
     origin: patient?.origin ?? '',
+    address: (patient as any)?.address ?? '',
+    city: (patient as any)?.city ?? '',
+    state: (patient as any)?.state ?? '',
+    zipCode: (patient as any)?.zipCode ?? '',
+    cpf: (patient as any)?.cpf ?? '',
     notes: patient?.notes ?? '',
   });
 
@@ -163,6 +168,58 @@ export function PatientForm({ patient, onSuccess }: PatientFormProps) {
               ))}
             </SelectContent>
           </Select>
+        </div>
+      </div>
+
+      {/* Campos de endereço e CPF */}
+      <div>
+        <Label htmlFor="cpf">CPF</Label>
+        <Input
+          id="cpf"
+          value={formData.cpf}
+          onChange={(e) => setFormData({ ...formData, cpf: e.target.value })}
+          placeholder="000.000.000-00"
+        />
+      </div>
+
+      <div>
+        <Label htmlFor="address">Endereço</Label>
+        <Input
+          id="address"
+          value={formData.address}
+          onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+          placeholder="Rua, número, complemento"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <Label htmlFor="city">Cidade</Label>
+          <Input
+            id="city"
+            value={formData.city}
+            onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+            placeholder="Cidade"
+          />
+        </div>
+        <div>
+          <Label htmlFor="state">Estado (UF)</Label>
+          <Input
+            id="state"
+            value={formData.state}
+            onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+            placeholder="UF"
+            maxLength={2}
+          />
+        </div>
+        <div>
+          <Label htmlFor="zipCode">CEP</Label>
+          <Input
+            id="zipCode"
+            value={formData.zipCode}
+            onChange={(e) => setFormData({ ...formData, zipCode: e.target.value })}
+            placeholder="00000-000"
+          />
         </div>
       </div>
 

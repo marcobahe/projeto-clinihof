@@ -23,6 +23,8 @@ interface Patient {
   name: string;
   email?: string | null;
   phone: string;
+  city?: string | null;
+  state?: string | null;
   notes?: string | null;
   createdAt: string;
 }

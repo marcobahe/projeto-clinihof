@@ -106,6 +106,9 @@ model Workspace {
   tags          Tag[]
   calendarEvents CalendarEvent[]
   machines      MachineConfig[] // Máquinas de cartão
+  prescriptions Prescription[]
+  formulas      Formula[]
+  mealPlans     MealPlan[]
 }
 
 // Supply model - Insumos da clínica
@@ -186,6 +189,9 @@ model Collaborator {
   procedures       ProcedureCollaborator[]
   quotes           Quote[]                 // Orçamentos criados por este profissional
   sales            Sale[]                  // Vendas realizadas por este colaborador
+  prescriptions    Prescription[]          // Receitas prescritas
+  formulas         Formula[]               // Fórmulas prescritas
+  mealPlans        MealPlan[]              // Planos alimentares criados
   
   @@index([workspaceId])
 }
@@ -241,6 +247,11 @@ model Patient {
   phone       String         // WhatsApp/Phone (required)
   birthday    DateTime?      // Data de aniversário
   origin      PatientOrigin? // Como conheceu a clínica
+  address     String?        // Endereço completo
+  city        String?        // Cidade
+  state       String?        // Estado (UF)
+  zipCode     String?        // CEP
+  cpf         String?        // CPF
   notes       String?        @db.Text
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
@@ -248,10 +259,14 @@ model Patient {
   workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   sales        Sale[]
   quotes       Quote[]
+  prescriptions Prescription[]
+  formulas      Formula[]
+  mealPlans     MealPlan[]
   
   @@unique([workspaceId, name, phone]) // Evita duplicação de pacientes com mesmo nome + telefone
   @@index([workspaceId])
   @@index([birthday])
+  @@index([city])
 }
 
 // Procedure model - Procedimentos estéticos com custo detalhado
@@ -606,6 +621,7 @@ model Quote {
   patient           Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
   collaborator      Collaborator? @relation(fields: [collaboratorId], references: [id])
   items             QuoteItem[]
+  mealPlans         MealPlan[]     // Planos alimentares vinculados
   
   @@index([workspaceId])
   @@index([patientId])
@@ -726,4 +742,135 @@ model WorkspaceSettings {
   updatedAt             DateTime  @updatedAt
   
   @@index([workspaceId])
+}
+
+// ========== MÓDULOS EXTRAS: RECEITAS, FÓRMULAS, NUTRIÇÃO ==========
+
+// Prescription — Receita médica
+model Prescription {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  patientId     String
+  collaboratorId String? // Profissional que prescreveu
+  date          DateTime @default(now())
+  diagnosis     String?  @db.Text // Diagnóstico / CID
+  instructions  String   @db.Text // Instruções da receita
+  observations  String?  @db.Text // Observações adicionais
+  status        String   @default("ACTIVE") // ACTIVE, CANCELLED, EXPIRED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  workspace     Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  patient       Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  collaborator  Collaborator? @relation(fields: [collaboratorId], references: [id])
+  items         PrescriptionItem[]
+
+  @@index([workspaceId])
+  @@index([patientId])
+  @@index([date])
+}
+
+model PrescriptionItem {
+  id             String   @id @default(cuid())
+  prescriptionId String
+  medication     String   // Nome do medicamento
+  dosage         String   // Dosagem (ex: "10mg", "1 comprimido")
+  frequency      String   // Frequência (ex: "8/8h", "1x ao dia")
+  duration       String   // Duração (ex: "7 dias", "30 dias")
+  notes          String?  // Observações do item
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+
+  @@index([prescriptionId])
+}
+
+// Formula — Prescrição de fórmula manipulada
+model Formula {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  patientId     String
+  collaboratorId String?
+  name          String   // Nome da fórmula
+  description   String?  @db.Text // Descrição/composição
+  ingredients   String   @db.Text // Ingredientes e quantidades
+  posology      String?  @db.Text // Posologia (como usar)
+  validity      String?  // Validade (ex: "90 dias")
+  compoundPharmacy String? // Farmácia de manipulação
+  status        String   @default("ACTIVE")
+  date          DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  workspace     Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  patient       Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  collaborator  Collaborator? @relation(fields: [collaboratorId], references: [id])
+
+  @@index([workspaceId])
+  @@index([patientId])
+}
+
+// MealPlan — Planejamento alimentar
+model MealPlan {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  patientId     String
+  collaboratorId String? // Nutricionista
+  title         String   // Título do plano
+  objective     String?  @db.Text // Objetivo (emagrecer, hipertrofia, etc.)
+  restrictions  String?  @db.Text // Restrições alimentares
+  observations  String?  @db.Text // Observações gerais
+  startDate     DateTime? // Início do plano
+  endDate       DateTime? // Fim do plano
+  quoteId       String?  // Vincular com orçamento
+  status        String   @default("ACTIVE") // ACTIVE, PAUSED, COMPLETED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  workspace     Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  patient       Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  collaborator  Collaborator? @relation(fields: [collaboratorId], references: [id])
+  quote         Quote?      @relation(fields: [quoteId], references: [id])
+  days          MealPlanDay[]
+
+  @@index([workspaceId])
+  @@index([patientId])
+  @@index([quoteId])
+}
+
+// MealPlanDay — Dia do plano alimentar
+model MealPlanDay {
+  id          String   @id @default(cuid())
+  mealPlanId  String
+  dayNumber   Int      // Dia 1, 2, 3...
+  dayLabel    String?  // Label (ex: "Segunda", "Dia 1")
+  notes       String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  mealPlan    MealPlan    @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+  meals       MealPlanMeal[]
+
+  @@index([mealPlanId])
+}
+
+// MealPlanMeal — Refeição do dia
+model MealPlanMeal {
+  id          String   @id @default(cuid())
+  dayId       String
+  mealType    String   // CAFÉ_DA_MANHÃ, LANCHE_MANHÃ, ALMOÇO, LANCHE_TARDE, JANTAR, CEIA
+  time        String?  // Horário (ex: "07:00")
+  description String   @db.Text // Descrição da refeição
+  calories    Int?     // Calorias estimadas
+  protein     Float?   // Proteínas (g)
+  carbs       Float?   // Carboidratos (g)
+  fat         Float?   // Gorduras (g)
+  notes       String?  // Observações
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  day         MealPlanDay @relation(fields: [dayId], references: [id], onDelete: Cascade)
+
+  @@index([dayId])
 }

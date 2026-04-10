@@ -79,6 +79,11 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         phone,
         birthday: birthday ? new Date(birthday) : null,
         origin: origin || null,
+        address: address || null,
+        city: city || null,
+        state: state || null,
+        zipCode: zipCode || null,
+        cpf: cpf || null,
         notes: notes || null,
       },
     });

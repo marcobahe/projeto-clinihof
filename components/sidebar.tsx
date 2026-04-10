@@ -33,21 +33,32 @@ import { ThemeToggle } from './theme-toggle';
 import { useEffect, useState } from 'react';
 
 const getAllMenuItems = () => [
+  // Principal
   { key: 'dashboard', name: 'Painel', href: '/dashboard', icon: LayoutDashboard },
   { key: 'agenda', name: 'Agenda', href: '/agenda', icon: Calendar },
   { key: 'patients', name: 'Pacientes', href: '/patients', icon: Users },
+  
+  // Comercial
   { key: 'quotes', name: 'Orçamentos', href: '/quotes', icon: FileText },
+  { key: 'sales', name: 'Vendas', href: '/appointments', icon: DollarSign },
+  
+  // Clínica
   { key: 'procedures', name: 'Procedimentos', href: '/procedures', icon: Stethoscope },
   { key: 'supplies', name: 'Insumos', href: '/supplies', icon: Package },
   { key: 'packages', name: 'Pacotes', href: '/packages', icon: Tag },
+  
+  // Equipe
   { key: 'collaborators', name: 'Colaboradores', href: '/collaborators', icon: UsersRound },
-  { key: 'sales', name: 'Vendas', href: '/appointments', icon: DollarSign },
   { key: 'commissions', name: 'Comissões', href: '/comissoes', icon: Percent },
-  { key: 'cashflow', name: 'Fluxo de Caixa', href: '/cashflow', icon: TrendingUp },
   { key: 'team', name: 'Equipe', href: '/team', icon: Users2 },
+  
+  // Financeiro
+  { key: 'cashflow', name: 'Fluxo de Caixa', href: '/cashflow', icon: TrendingUp },
+  
+  // Configurações
   { key: 'settings', name: 'Configurações', href: '/configuracoes', icon: Settings },
   
-  // Itens extras que ainda não estão no sistema de permissões (manter sempre visíveis por ora)
+  // Conta
   { key: 'account', name: 'Minha Conta', href: '/account', icon: UserCircle, alwaysVisible: true },
 ];
 
