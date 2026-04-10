@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, TrendingUp, DollarSign, CheckCircle, XCircle, Clock, FileText, Search, Filter, Download, Settings } from 'lucide-react';
+import { Plus, TrendingUp, DollarSign, CheckCircle, XCircle, Clock, FileText, Search, Filter, Download, Settings, Edit2, Trash2, Copy, Package, Percent } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,11 +31,24 @@ interface Procedure {
 interface QuoteItem {
   id?: string;
   procedureId?: string;
+  packageId?: string;
   description: string;
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+  originalPrice?: number;
+  savingsAmount?: number;
+  savingsPercent?: number;
   procedure?: Procedure;
+  package?: PackageInfo;
+}
+
+interface PackageInfo {
+  id: string;
+  name: string;
+  finalPrice: number;
+  discountPercent: number;
+  items?: { procedureId: string; quantity: number; procedure?: Procedure }[];
 }
 
 interface Quote {
@@ -91,9 +104,13 @@ export default function QuotesPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isConvertModalOpen, setIsConvertModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isPartialModalOpen, setIsPartialModalOpen] = useState(false);
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
+  const [editingQuote, setEditingQuote] = useState<Quote | null>(null);
+  const [packages, setPackages] = useState<PackageInfo[]>([]);
 
-  // Form state for creating quote
+  // Form state for creating/editing quote
   const [formData, setFormData] = useState({
     patientId: '',
     collaboratorId: '',
@@ -101,8 +118,13 @@ export default function QuotesPage() {
     leadSource: '',
     notes: '',
     expirationDate: '',
+    discountPercent: '',
+    discountAmount: '',
     items: [] as QuoteItem[]
   });
+
+  // Partial conversion state
+  const [partialSelectedItems, setPartialSelectedItems] = useState<string[]>([]);
 
   // Form state for converting quote to sale
   const [paymentSplits, setPaymentSplits] = useState([{
@@ -116,6 +138,7 @@ export default function QuotesPage() {
     fetchPatients();
     fetchProcedures();
     fetchCollaborators();
+    fetchPackages();
     fetchStats();
   }, []);
 
@@ -167,6 +190,18 @@ export default function QuotesPage() {
       }
     } catch (error) {
       console.error('Error fetching collaborators:', error);
+    }
+  };
+
+  const fetchPackages = async () => {
+    try {
+      const res = await fetch('/api/packages');
+      if (res.ok) {
+        const data = await res.json();
+        setPackages(data);
+      }
+    } catch (error) {
+      console.error('Error fetching packages:', error);
     }
   };
 
@@ -229,11 +264,29 @@ export default function QuotesPage() {
       return;
     }
 
+    // Calcular totais com desconto
+    const totalAmount = formData.items.reduce((sum, item) => sum + item.totalPrice, 0);
+    let discountAmount = parseFloat(formData.discountAmount) || 0;
+    let discountPercent = parseFloat(formData.discountPercent) || 0;
+    
+    if (discountPercent > 0 && discountAmount === 0) {
+      discountAmount = (totalAmount * discountPercent) / 100;
+    } else if (discountAmount > 0 && discountPercent === 0) {
+      discountPercent = (discountAmount / totalAmount) * 100;
+    }
+    const finalAmount = totalAmount - discountAmount;
+
     try {
       const res = await fetch('/api/quotes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          ...formData,
+          totalAmount,
+          discountPercent,
+          discountAmount,
+          finalAmount
+        })
       });
 
       if (res.ok) {
@@ -350,6 +403,186 @@ export default function QuotesPage() {
       installments: 1
     }]);
     setIsConvertModalOpen(true);
+  };
+
+  // ===== EDITAR ORÇAMENTO =====
+  const handleEditQuote = (quote: Quote) => {
+    setEditingQuote(quote);
+    setFormData({
+      patientId: quote.patient.id,
+      collaboratorId: quote.collaborator?.id || '',
+      title: quote.title,
+      leadSource: quote.leadSource || '',
+      notes: quote.notes || '',
+      expirationDate: quote.expirationDate ? quote.expirationDate.split('T')[0] : '',
+      discountPercent: quote.discountPercent ? quote.discountPercent.toString() : '',
+      discountAmount: quote.discountAmount ? quote.discountAmount.toString() : '',
+      items: quote.items.map(item => ({
+        id: item.id,
+        procedureId: item.procedureId,
+        packageId: item.packageId,
+        description: item.description,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: item.totalPrice
+      }))
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEditQuote = async () => {
+    if (!editingQuote) return;
+    
+    const totalAmount = formData.items.reduce((sum, item) => sum + item.totalPrice, 0);
+    let discountAmount = parseFloat(formData.discountAmount) || 0;
+    let discountPercent = parseFloat(formData.discountPercent) || 0;
+    
+    if (discountPercent > 0 && discountAmount === 0) {
+      discountAmount = (totalAmount * discountPercent) / 100;
+    } else if (discountAmount > 0 && discountPercent === 0) {
+      discountPercent = totalAmount > 0 ? (discountAmount / totalAmount) * 100 : 0;
+    }
+
+    try {
+      const res = await fetch(`/api/quotes/${editingQuote.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: formData.title,
+          collaboratorId: formData.collaboratorId || null,
+          notes: formData.notes,
+          leadSource: formData.leadSource,
+          discountPercent,
+          discountAmount,
+          items: formData.items.map(item => ({
+            procedureId: item.procedureId || null,
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice
+          }))
+        })
+      });
+
+      if (res.ok) {
+        toast.success('Orçamento atualizado!');
+        setIsEditModalOpen(false);
+        setEditingQuote(null);
+        fetchQuotes();
+        fetchStats();
+      } else {
+        const error = await res.json();
+        toast.error(error.error || 'Erro ao atualizar');
+      }
+    } catch (error) {
+      toast.error('Erro ao atualizar orçamento');
+    }
+  };
+
+  // ===== EXCLUIR ORÇAMENTO =====
+  const handleDeleteQuote = async (quoteId: string) => {
+    if (!confirm('Deseja realmente excluir este orçamento? Esta ação não pode ser desfeita.')) return;
+    
+    try {
+      const res = await fetch(`/api/quotes/${quoteId}`, { method: 'DELETE' });
+      if (res.ok) {
+        toast.success('Orçamento excluído!');
+        fetchQuotes();
+        fetchStats();
+      } else {
+        const error = await res.json();
+        toast.error(error.error || 'Erro ao excluir');
+      }
+    } catch (error) {
+      toast.error('Erro ao excluir orçamento');
+    }
+  };
+
+  // ===== DUPLICAR ORÇAMENTO =====
+  const handleDuplicateQuote = async (quoteId: string) => {
+    try {
+      const res = await fetch(`/api/quotes/${quoteId}/duplicate`, { method: 'POST' });
+      if (res.ok) {
+        toast.success('Orçamento duplicado!');
+        fetchQuotes();
+        fetchStats();
+      } else {
+        const error = await res.json();
+        toast.error(error.error || 'Erro ao duplicar');
+      }
+    } catch (error) {
+      toast.error('Erro ao duplicar orçamento');
+    }
+  };
+
+  // ===== ADICIONAR PACOTE AO ORÇAMENTO =====
+  const handleAddPackage = (pkg: PackageInfo) => {
+    // Calcular preço original (soma dos procedimentos)
+    const originalPrice = pkg.items?.reduce((sum, pi) => {
+      const proc = procedures.find(p => p.id === pi.procedureId);
+      return sum + (proc ? proc.price * pi.quantity : 0);
+    }, 0) || 0;
+    const savingsAmount = originalPrice - pkg.finalPrice;
+    const savingsPercent = originalPrice > 0 ? (savingsAmount / originalPrice) * 100 : 0;
+
+    setFormData(prev => ({
+      ...prev,
+      items: [...prev.items, {
+        packageId: pkg.id,
+        description: `📦 ${pkg.name}`,
+        quantity: 1,
+        unitPrice: pkg.finalPrice,
+        totalPrice: pkg.finalPrice,
+        originalPrice,
+        savingsAmount,
+        savingsPercent
+      }]
+    }));
+    toast.success(`Pacote "${pkg.name}" adicionado! Economia de ${formatCurrency(savingsAmount)}`);
+  };
+
+  // ===== FECHAMENTO PARCIAL =====
+  const handlePartialConvert = async () => {
+    if (!selectedQuote || partialSelectedItems.length === 0) {
+      toast.error('Selecione pelo menos um item');
+      return;
+    }
+
+    const selectedTotal = selectedQuote.items
+      .filter(item => partialSelectedItems.includes(item.id))
+      .reduce((sum, item) => sum + item.totalPrice, 0);
+
+    const totalSplitAmount = paymentSplits.reduce((sum, split) => sum + split.amount, 0);
+    if (Math.abs(totalSplitAmount - selectedTotal) > 0.01) {
+      toast.error(`Total dos pagamentos deve ser ${formatCurrency(selectedTotal)}`);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/quotes/${selectedQuote.id}/convert-partial`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          selectedItemIds: partialSelectedItems,
+          paymentSplits,
+          saleDate: new Date().toISOString()
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        toast.success(data.message);
+        setIsPartialModalOpen(false);
+        setSelectedQuote(null);
+        setPartialSelectedItems([]);
+        fetchQuotes();
+        fetchStats();
+      } else {
+        const error = await res.json();
+        toast.error(error.error || 'Erro no fechamento parcial');
+      }
+    } catch (error) {
+      toast.error('Erro no fechamento parcial');
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -494,14 +727,34 @@ export default function QuotesPage() {
                 />
               </div>
 
-              <div className="border-t pt-4">
-                <div className="flex justify-between items-center mb-4">
-                  <Label>Itens do Orçamento *</Label>
-                  <Button type="button" size="sm" onClick={handleAddItem}>
-                    <Plus className="h-4 w-4 mr-1" />
-                    Adicionar Item
-                  </Button>
-                </div>
+                <div className="border-t pt-4">
+                  <div className="flex justify-between items-center mb-4">
+                    <Label>Itens do Orçamento *</Label>
+                    <div className="flex gap-2">
+                      {packages.length > 0 && (
+                        <Select onValueChange={(value) => {
+                          const pkg = packages.find(p => p.id === value);
+                          if (pkg) handleAddPackage(pkg);
+                        }}>
+                          <SelectTrigger className="w-[180px]">
+                            <Package className="h-4 w-4 mr-2" />
+                            <SelectValue placeholder="Adicionar Pacote" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {packages.filter(p => p.isActive !== false).map(pkg => (
+                              <SelectItem key={pkg.id} value={pkg.id}>
+                                {pkg.name} - {formatCurrency(pkg.finalPrice)}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                      <Button type="button" size="sm" onClick={handleAddItem}>
+                        <Plus className="h-4 w-4 mr-1" />
+                        Adicionar Item
+                      </Button>
+                    </div>
+                  </div>
 
                 {formData.items.map((item, index) => (
                   <Card key={index} className="mb-3">
@@ -574,16 +827,71 @@ export default function QuotesPage() {
                   </div>
                 )}
 
-                {formData.items.length > 0 && (
-                  <div className="mt-4 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                    <div className="flex justify-between items-center text-lg font-bold">
-                      <span>Total do Orçamento:</span>
-                      <span className="text-purple-600">
-                        {formatCurrency(formData.items.reduce((sum, item) => sum + item.totalPrice, 0))}
-                      </span>
+                {formData.items.length > 0 && (() => {
+                  const subtotal = formData.items.reduce((sum, item) => sum + item.totalPrice, 0);
+                  const discPct = parseFloat(formData.discountPercent) || 0;
+                  const discAmt = parseFloat(formData.discountAmount) || 0;
+                  const finalDiscAmt = discPct > 0 ? (subtotal * discPct / 100) : discAmt;
+                  const finalTotal = subtotal - finalDiscAmt;
+                  
+                  return (
+                    <div className="mt-4 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg space-y-3">
+                      {/* Campos de desconto */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-sm">Desconto (%)</Label>
+                          <div className="relative">
+                            <Input
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              placeholder="0"
+                              value={formData.discountPercent}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setFormData(prev => ({ ...prev, discountPercent: val, discountAmount: '' }));
+                              }}
+                            />
+                            <Percent className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                          </div>
+                        </div>
+                        <div>
+                          <Label className="text-sm">Desconto (R$)</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="0,00"
+                            value={formData.discountAmount}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setFormData(prev => ({ ...prev, discountAmount: val, discountPercent: '' }));
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Exibir economia dos pacotes */}
+                      {formData.items.some(item => (item as any).savingsAmount > 0) && (
+                        <div className="text-sm text-green-600 font-medium">
+                          📦 Economia com pacotes: {formatCurrency(formData.items.reduce((sum, item) => sum + ((item as any).savingsAmount || 0), 0))}
+                        </div>
+                      )}
+
+                      <div className="flex justify-between items-center">
+                        <div>
+                          {finalDiscAmt > 0 && (
+                            <p className="text-sm text-gray-500 line-through">{formatCurrency(subtotal)}</p>
+                          )}
+                          <span className="text-lg font-bold">Total Final:</span>
+                        </div>
+                        <span className="text-xl font-bold text-purple-600">
+                          {formatCurrency(finalTotal)}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
 
               <div className="flex justify-end gap-2 pt-4">
@@ -746,6 +1054,11 @@ export default function QuotesPage() {
                         {quote.items.map((item, idx) => (
                           <li key={idx} className="text-sm text-muted-foreground">
                             • {item.description} - {item.quantity}x {formatCurrency(item.unitPrice)} = {formatCurrency(item.totalPrice)}
+                            {(item as any).savingsAmount > 0 && (
+                              <span className="ml-2 text-green-600 text-xs font-medium">
+                                Economia de {formatCurrency((item as any).savingsAmount)} ({((item as any).savingsPercent || 0).toFixed(0)}%)
+                              </span>
+                            )}
                           </li>
                         ))}
                       </ul>
@@ -771,6 +1084,37 @@ export default function QuotesPage() {
                     </div>
 
                     <div className="space-y-2">
+                      {/* Ações gerais — sempre visíveis */}
+                      <div className="grid grid-cols-3 gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleEditQuote(quote)}
+                          className="w-full"
+                          title="Editar"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDuplicateQuote(quote.id)}
+                          className="w-full"
+                          title="Duplicar"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDeleteQuote(quote.id)}
+                          className="w-full text-red-600 hover:text-red-700 hover:bg-red-50"
+                          title="Excluir"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+
                       <Button
                         size="sm"
                         variant="outline"
@@ -797,6 +1141,21 @@ export default function QuotesPage() {
                           >
                             Converter em Venda
                           </Button>
+                          {quote.items.length > 1 && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedQuote(quote);
+                                setPartialSelectedItems([]);
+                                setPaymentSplits([{ paymentMethod: 'CASH_PIX', amount: 0, installments: 1 }]);
+                                setIsPartialModalOpen(true);
+                              }}
+                              className="w-full border-green-600 text-green-600 hover:bg-green-50"
+                            >
+                              Fechar Parcial
+                            </Button>
+                          )}
                         </>
                       )}
                       {quote.status === 'SENT' && (
@@ -808,6 +1167,21 @@ export default function QuotesPage() {
                           >
                             Converter em Venda
                           </Button>
+                          {quote.items.length > 1 && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedQuote(quote);
+                                setPartialSelectedItems([]);
+                                setPaymentSplits([{ paymentMethod: 'CASH_PIX', amount: 0, installments: 1 }]);
+                                setIsPartialModalOpen(true);
+                              }}
+                              className="w-full border-green-600 text-green-600 hover:bg-green-50"
+                            >
+                              Fechar Parcial
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="destructive"
@@ -818,6 +1192,7 @@ export default function QuotesPage() {
                           </Button>
                         </>
                       )}
+                      )}
                     </div>
                   </div>
                 </div>
@@ -826,6 +1201,218 @@ export default function QuotesPage() {
           ))
         )}
       </div>
+
+      {/* Edit Quote Modal */}
+      <Dialog open={isEditModalOpen} onOpenChange={(open) => {
+        setIsEditModalOpen(open);
+        if (!open) setEditingQuote(null);
+      }}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Orçamento</DialogTitle>
+            <DialogDescription>Atualize os dados e itens do orçamento</DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <Label>Título *</Label>
+              <Input value={formData.title} onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Observações</Label>
+              <Textarea value={formData.notes} onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))} rows={2} />
+            </div>
+
+            {/* Itens */}
+            <div className="border-t pt-4">
+              <div className="flex justify-between items-center mb-4">
+                <Label>Itens</Label>
+                <div className="flex gap-2">
+                  {packages.length > 0 && (
+                    <Select onValueChange={(value) => {
+                      const pkg = packages.find(p => p.id === value);
+                      if (pkg) handleAddPackage(pkg);
+                    }}>
+                      <SelectTrigger className="w-[180px]">
+                        <Package className="h-4 w-4 mr-2" />
+                        <SelectValue placeholder="Adicionar Pacote" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {packages.filter(p => p.isActive !== false).map(pkg => (
+                          <SelectItem key={pkg.id} value={pkg.id}>
+                            {pkg.name} - {formatCurrency(pkg.finalPrice)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <Button type="button" size="sm" onClick={handleAddItem}>
+                    <Plus className="h-4 w-4 mr-1" /> Item
+                  </Button>
+                </div>
+              </div>
+
+              {formData.items.map((item, index) => (
+                <Card key={index} className="mb-3">
+                  <CardContent className="p-4">
+                    <div className="grid grid-cols-12 gap-3">
+                      <div className="col-span-6">
+                        <Label>Procedimento</Label>
+                        <Select value={item.procedureId || ''} onValueChange={(value) => handleProcedureSelect(index, value)}>
+                          <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                          <SelectContent>
+                            {procedures.map(proc => (
+                              <SelectItem key={proc.id} value={proc.id}>{proc.name} - {formatCurrency(proc.price)}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input className="mt-2" value={item.description} onChange={(e) => handleItemChange(index, 'description', e.target.value)} placeholder="Descrição" />
+                      </div>
+                      <div className="col-span-2">
+                        <Label>Qtd</Label>
+                        <Input type="number" min="1" value={item.quantity} onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 1)} />
+                      </div>
+                      <div className="col-span-3">
+                        <Label>Preço Unit.</Label>
+                        <Input type="number" step="0.01" value={item.unitPrice} onChange={(e) => handleItemChange(index, 'unitPrice', parseFloat(e.target.value) || 0)} />
+                      </div>
+                      <div className="col-span-1 flex items-end">
+                        <Button type="button" variant="destructive" size="sm" onClick={() => handleRemoveItem(index)}>×</Button>
+                      </div>
+                    </div>
+                    {(item as any).savingsAmount > 0 && (
+                      <p className="mt-2 text-xs text-green-600 font-medium">
+                        📦 Economia: {formatCurrency((item as any).savingsAmount)} ({((item as any).savingsPercent || 0).toFixed(0)}%)
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            {/* Desconto na edição */}
+            {formData.items.length > 0 && (() => {
+              const subtotal = formData.items.reduce((sum, item) => sum + item.totalPrice, 0);
+              const discPct = parseFloat(formData.discountPercent) || 0;
+              const discAmt = parseFloat(formData.discountAmount) || 0;
+              const finalDiscAmt = discPct > 0 ? (subtotal * discPct / 100) : discAmt;
+              return (
+                <div className="grid grid-cols-3 gap-4 items-end">
+                  <div>
+                    <Label>Desconto (%)</Label>
+                    <Input type="number" step="0.1" placeholder="0" value={formData.discountPercent} onChange={(e) => setFormData(prev => ({ ...prev, discountPercent: e.target.value, discountAmount: '' }))} />
+                  </div>
+                  <div>
+                    <Label>Desconto (R$)</Label>
+                    <Input type="number" step="0.01" placeholder="0,00" value={formData.discountAmount} onChange={(e) => setFormData(prev => ({ ...prev, discountAmount: e.target.value, discountPercent: '' }))} />
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-muted-foreground">Total Final</p>
+                    <p className="text-xl font-bold text-purple-600">{formatCurrency(subtotal - finalDiscAmt)}</p>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => { setIsEditModalOpen(false); setEditingQuote(null); }}>Cancelar</Button>
+            <Button onClick={handleSaveEditQuote} className="bg-purple-600 hover:bg-purple-700">Salvar Alterações</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Partial Conversion Modal */}
+      <Dialog open={isPartialModalOpen} onOpenChange={setIsPartialModalOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Fechamento Parcial</DialogTitle>
+            <DialogDescription>Selecione os itens que deseja converter em venda agora</DialogDescription>
+          </DialogHeader>
+          
+          {selectedQuote && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                {selectedQuote.items.map(item => {
+                  const isSelected = partialSelectedItems.includes(item.id);
+                  return (
+                    <div
+                      key={item.id}
+                      className={`p-3 border rounded-lg cursor-pointer transition-colors ${isSelected ? 'border-green-500 bg-green-50' : 'hover:border-gray-400'}`}
+                      onClick={() => {
+                        setPartialSelectedItems(prev =>
+                          isSelected ? prev.filter(id => id !== item.id) : [...prev, item.id]
+                        );
+                      }}
+                    >
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-4 h-4 border-2 rounded flex items-center justify-center ${isSelected ? 'border-green-500 bg-green-500' : 'border-gray-300'}`}>
+                            {isSelected && <CheckCircle className="h-3 w-3 text-white" />}
+                          </div>
+                          <span className="font-medium">{item.description}</span>
+                        </div>
+                        <span className="font-semibold">{formatCurrency(item.totalPrice)}</span>
+                      </div>
+                      <p className="text-sm text-muted-foreground ml-6">{item.quantity}x {formatCurrency(item.unitPrice)}</p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {partialSelectedItems.length > 0 && (() => {
+                const selectedTotal = selectedQuote.items.filter(i => partialSelectedItems.includes(i.id)).reduce((sum, i) => sum + i.totalPrice, 0);
+                return (
+                  <>
+                    <div className="p-3 bg-purple-50 rounded-lg flex justify-between items-center">
+                      <span className="font-semibold">Total Selecionado:</span>
+                      <span className="text-lg font-bold text-purple-600">{formatCurrency(selectedTotal)}</span>
+                    </div>
+
+                    <div>
+                      <Label>Formas de Pagamento</Label>
+                      {paymentSplits.map((split, index) => (
+                        <div key={index} className="grid grid-cols-3 gap-3 mb-3">
+                          <Select value={split.paymentMethod} onValueChange={(value) => {
+                            const newSplits = [...paymentSplits];
+                            newSplits[index].paymentMethod = value;
+                            setPaymentSplits(newSplits);
+                          }}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="CASH_PIX">Dinheiro/Pix</SelectItem>
+                              <SelectItem value="CREDIT_CARD">Cartão Crédito</SelectItem>
+                              <SelectItem value="DEBIT_CARD">Cartão Débito</SelectItem>
+                              <SelectItem value="BANK_SLIP">Boleto</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Input type="number" step="0.01" placeholder="Valor" value={split.amount} onChange={(e) => {
+                            const newSplits = [...paymentSplits];
+                            newSplits[index].amount = parseFloat(e.target.value) || 0;
+                            setPaymentSplits(newSplits);
+                          }} />
+                          {split.paymentMethod === 'CREDIT_CARD' && (
+                            <Input type="number" min="1" placeholder="Parcelas" value={split.installments} onChange={(e) => {
+                              const newSplits = [...paymentSplits];
+                              newSplits[index].installments = parseInt(e.target.value) || 1;
+                              setPaymentSplits(newSplits);
+                            }} />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button variant="outline" onClick={() => setIsPartialModalOpen(false)}>Cancelar</Button>
+                <Button onClick={handlePartialConvert} className="bg-green-600 hover:bg-green-700">Confirmar Fechamento Parcial</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Convert to Sale Modal */}
       <Dialog open={isConvertModalOpen} onOpenChange={setIsConvertModalOpen}>

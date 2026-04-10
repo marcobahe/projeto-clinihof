@@ -532,6 +532,7 @@ model Package {
   workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   items           PackageItem[]   // Procedimentos incluídos no pacote
   sales           Sale[]          // Vendas que usaram este pacote
+  quoteItems      QuoteItem[]     // Itens de orçamento que referenciam este pacote
   
   @@index([workspaceId])
   @@index([isActive])
@@ -605,24 +606,32 @@ model Quote {
   @@index([leadSource])
 }
 
-// QuoteItem - Procedimentos incluídos no orçamento
+// QuoteItem - Procedimentos ou Pacotes incluídos no orçamento
 model QuoteItem {
   id            String      @id @default(cuid())
   quoteId       String
-  procedureId   String?     // Opcional: pode ser um procedimento customizado
+  procedureId   String?     // Opcional: pode ser um procedimento ou pacote
+  packageId     String?     // Opcional: pode ser um pacote
   description   String      // Descrição do item
   quantity      Int         @default(1) // Quantidade de sessões
   unitPrice     Float       // Preço unitário
   totalPrice    Float       // Preço total (quantidade × unitPrice)
+  
+  // Economia quando é pacote
+  originalPrice Float?      // Preço original (soma dos procedimentos) sem desconto
+  savingsAmount Float?      // Valor economizado com o pacote
+  savingsPercent Float?     // % de economia
   
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   
   quote         Quote       @relation(fields: [quoteId], references: [id], onDelete: Cascade)
   procedure     Procedure?  @relation(fields: [procedureId], references: [id])
+  package       Package?    @relation(fields: [packageId], references: [id])
   
   @@index([quoteId])
   @@index([procedureId])
+  @@index([packageId])
 }
 
 
