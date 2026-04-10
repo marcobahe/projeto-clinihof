@@ -33,7 +33,7 @@ export async function POST(
 
     const { id } = params;
     const body = await req.json();
-    const { paymentSplits, saleDate, notes } = body;
+    const { paymentSplits, saleDate, notes, discountPercent, discountAmount, cardFeePercent, taxRate } = body;
 
     // Get the quote with items
     const quote = await prisma.quote.findFirst({
@@ -91,6 +91,16 @@ export async function POST(
           patientId: quote.patientId,
           saleDate: saleDate ? new Date(saleDate) : new Date(),
           totalAmount: quote.finalAmount,
+          discountPercent: discountPercent || 0,
+          discountAmount: discountAmount || 0,
+          finalAmount: quote.finalAmount - (discountAmount || 0),
+          cardFeePercent: cardFeePercent || null,
+          cardFeeAmount: cardFeePercent ? quote.finalAmount * (cardFeePercent / 100) : null,
+          taxRate: taxRate || null,
+          taxAmount: taxRate ? quote.finalAmount * (taxRate / 100) : null,
+          netAmount: quote.finalAmount
+            - (cardFeePercent ? quote.finalAmount * (cardFeePercent / 100) : 0)
+            - (taxRate ? quote.finalAmount * (taxRate / 100) : 0),
           paymentStatus: 'PENDING',
           notes: notes || quote.notes || `Convertido do orçamento: ${quote.title}`
         }

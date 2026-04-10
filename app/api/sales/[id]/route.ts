@@ -86,7 +86,7 @@ export async function GET(
   }
 }
 
-// DELETE /api/sales/[id] - Delete a sale
+// DELETE /api/sales/[id] - Delete a sale (com estorno de comissões)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -94,58 +94,152 @@ export async function DELETE(
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
     const workspace = await getUserWorkspace((session.user as any).id);
     if (!workspace) {
-      return NextResponse.json({ error: 'Workspace not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Workspace não encontrado' }, { status: 404 });
     }
 
-    // First check if sale exists and belongs to workspace
     const existingSale = await prisma.sale.findFirst({
-      where: {
-        id: params.id,
-        workspaceId: workspace.id,
-      },
+      where: { id: params.id, workspaceId: workspace.id },
+      include: { sessions: true }
     });
 
     if (!existingSale) {
-      return NextResponse.json({ error: 'Sale not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Venda não encontrada' }, { status: 404 });
     }
 
-    // Fire-and-forget: delete Google Calendar events for all sessions with googleEventId
-    const sessionsWithGoogleEvent = await prisma.procedureSession.findMany({
-      where: { saleId: params.id, googleEventId: { not: null } },
-      select: { id: true },
-    });
+    // Verificar se tem sessões completadas
+    const completedSessions = existingSale.sessions.filter(s => s.status === 'COMPLETED');
+    if (completedSessions.length > 0) {
+      return NextResponse.json({
+        error: `Não é possível excluir esta venda. ${completedSessions.length} sessão(ões) já foram realizadas. Considere cancelar os procedimentos pendentes.`
+      }, { status: 400 });
+    }
+
+    // Fire-and-forget: delete Google Calendar events
+    const sessionsWithGoogleEvent = existingSale.sessions.filter(s => s.googleEventId);
     const userId = (session.user as any).id;
     for (const sess of sessionsWithGoogleEvent) {
       syncSessionToGoogleCalendar(userId, sess.id, 'delete')
         .catch((err) => console.error('[GoogleCalendar] Sync error (sale delete):', err));
     }
 
-    // Delete related sessions first
-    await prisma.procedureSession.deleteMany({
-      where: { saleId: params.id },
+    // Estornar comissões — deletar parcelas, splits, sessões, items, venda
+    await prisma.$transaction(async (tx) => {
+      // Deletar parcelas de cada payment split
+      const splits = await tx.paymentSplit.findMany({ where: { saleId: params.id } });
+      for (const split of splits) {
+        await tx.paymentInstallment.deleteMany({ where: { paymentSplitId: split.id } });
+      }
+      await tx.paymentSplit.deleteMany({ where: { saleId: params.id } });
+      await tx.procedureSession.deleteMany({ where: { saleId: params.id } });
+      await tx.saleItem.deleteMany({ where: { saleId: params.id } });
+      await tx.sale.delete({ where: { id: params.id } });
     });
 
-    // Delete sale items
-    await prisma.saleItem.deleteMany({
-      where: { saleId: params.id },
-    });
-
-    // Delete sale
-    await prisma.sale.delete({
-      where: { id: params.id },
-    });
-
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ message: 'Venda excluída com estorno de comissões' });
   } catch (error) {
     console.error('Error deleting sale:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete sale' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Erro ao excluir venda' }, { status: 500 });
   }
+}
+
+// PUT /api/sales/[id] - Editar venda
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
+    const workspace = await getUserWorkspace((session.user as any).id);
+    if (!workspace) {
+      return NextResponse.json({ error: 'Workspace não encontrado' }, { status: 404 });
+    }
+
+    const existingSale = await prisma.sale.findFirst({
+      where: { id: params.id, workspaceId: workspace.id }
+    });
+
+    if (!existingSale) {
+      return NextResponse.json({ error: 'Venda não encontrada' }, { status: 404 });
+    }
+
+    const body = await request.json();
+    const { notes, discountPercent, discountAmount, cardFeePercent, taxRate, sellerId } = body;
+
+    const updateData: any = {};
+    if (notes !== undefined) updateData.notes = notes;
+    if (sellerId !== undefined) updateData.sellerId = sellerId || null;
+
+    // Recalcular financeiro
+    if (discountPercent !== undefined || discountAmount !== undefined || cardFeePercent !== undefined || taxRate !== undefined) {
+      const currentTotal = existingSale.totalAmount;
+      let finalAmount = existingSale.finalAmount || currentTotal;
+      
+      // Desconto
+      const discPct = discountPercent ?? existingSale.discountPercent;
+      const discAmt = discountAmount ?? existingSale.discountAmount;
+      if (discPct > 0) {
+        updateData.discountPercent = discPct;
+        updateData.discountAmount = (currentTotal * discPct) / 100;
+        finalAmount = currentTotal - updateData.discountAmount;
+      } else if (discAmt > 0) {
+        updateData.discountAmount = discAmt;
+        updateData.discountPercent = currentTotal > 0 ? (discAmt / currentTotal) * 100 : 0;
+        finalAmount = currentTotal - discAmt;
+      }
+      updateData.finalAmount = finalAmount;
+
+      // Taxa de cartão
+      const fee = cardFeePercent ?? existingSale.cardFeePercent;
+      if (fee) {
+        updateData.cardFeePercent = fee;
+        updateData.cardFeeAmount = finalAmount * (fee / 100);
+      }
+
+      // Imposto
+      const tax = taxRate ?? existingSale.taxRate;
+      if (tax) {
+        updateData.taxRate = tax;
+        updateData.taxAmount = finalAmount * (tax / 100);
+      }
+
+      // Líquido
+      updateData.netAmount = finalAmount
+        - (updateData.cardFeeAmount || existingSale.cardFeeAmount || 0)
+        - (updateData.taxAmount || existingSale.taxAmount || 0);
+    }
+
+    const updatedSale = await prisma.sale.update({
+      where: { id: params.id },
+      data: updateData,
+      include: {
+        patient: true,
+        items: { include: { procedure: true } },
+        sessions: { include: { procedure: true } },
+        paymentSplits: { include: { installmentDetails: true } }
+      }
+    });
+
+    return NextResponse.json(updatedSale);
+  } catch (error) {
+    console.error('Error updating sale:', error);
+    return NextResponse.json({ error: 'Erro ao atualizar venda' }, { status: 500 });
+  }
+}
+
+// PATCH /api/sales/[id] - Atualização parcial
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  // Reusa a lógica do PUT
+  return PUT(request, { params });
 }

@@ -375,7 +375,11 @@ export default function QuotesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           paymentSplits,
-          saleDate: new Date().toISOString()
+          saleDate: new Date().toISOString(),
+          discountPercent: parseFloat((formData as any).convertDiscountPercent) || 0,
+          discountAmount: parseFloat((formData as any).convertDiscountAmount) || 0,
+          cardFeePercent: parseFloat((formData as any).convertCardFee) || null,
+          taxRate: parseFloat((formData as any).convertTaxRate) || null
         })
       });
 
@@ -1416,22 +1420,90 @@ export default function QuotesPage() {
 
       {/* Convert to Sale Modal */}
       <Dialog open={isConvertModalOpen} onOpenChange={setIsConvertModalOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Converter Orçamento em Venda</DialogTitle>
             <DialogDescription>
-              Configure as formas de pagamento para converter este orçamento em uma venda confirmada.
+              Configure pagamento, desconto e taxas
             </DialogDescription>
           </DialogHeader>
           
-          {selectedQuote && (
+          {selectedQuote && (() => {
+            const convDiscAmt = parseFloat((formData as any).convertDiscountAmount || '0') || 0;
+            const convDiscPct = parseFloat((formData as any).convertDiscountPercent || '0') || 0;
+            const effectiveDisc = convDiscPct > 0 ? (selectedQuote.finalAmount * convDiscPct / 100) : convDiscAmt;
+            const afterDiscount = selectedQuote.finalAmount - effectiveDisc;
+            const convCardFee = parseFloat((formData as any).convertCardFee || '0') || 0;
+            const convTaxRate = parseFloat((formData as any).convertTaxRate || '0') || 0;
+            const netAmount = afterDiscount - (convCardFee > 0 ? afterDiscount * convCardFee / 100 : 0) - (convTaxRate > 0 ? afterDiscount * convTaxRate / 100 : 0);
+
+            return (
             <div className="space-y-4">
               <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                <p className="text-sm font-semibold">Valor Total:</p>
-                <p className="text-2xl font-bold text-purple-600">
-                  {formatCurrency(selectedQuote.finalAmount)}
-                </p>
+                <div className="flex justify-between">
+                  <div>
+                    <p className="text-sm font-semibold">Valor do Orçamento:</p>
+                    <p className="text-xl font-bold text-purple-600">{formatCurrency(selectedQuote.finalAmount)}</p>
+                  </div>
+                  {effectiveDisc > 0 && (
+                    <div className="text-right">
+                      <p className="text-sm text-muted-foreground">Após desconto:</p>
+                      <p className="text-xl font-bold text-green-600">{formatCurrency(afterDiscount)}</p>
+                    </div>
+                  )}
+                </div>
               </div>
+
+              {/* Desconto na conversão */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Desconto Adicional (%)</Label>
+                  <Input
+                    type="number" step="0.1" min="0" placeholder="0"
+                    value={(formData as any).convertDiscountPercent || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, convertDiscountPercent: e.target.value, convertDiscountAmount: '' } as any))}
+                  />
+                </div>
+                <div>
+                  <Label>Desconto Adicional (R$)</Label>
+                  <Input
+                    type="number" step="0.01" min="0" placeholder="0,00"
+                    value={(formData as any).convertDiscountAmount || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, convertDiscountAmount: e.target.value, convertDiscountPercent: '' } as any))}
+                  />
+                </div>
+              </div>
+
+              {/* Taxas */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Taxa do Cartão (%)</Label>
+                  <Input
+                    type="number" step="0.1" min="0" placeholder="Ex: 3.5"
+                    value={(formData as any).convertCardFee || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, convertCardFee: e.target.value } as any))}
+                  />
+                </div>
+                <div>
+                  <Label>Alíquota de Imposto (%)</Label>
+                  <Input
+                    type="number" step="0.1" min="0" placeholder="Ex: 6.0"
+                    value={(formData as any).convertTaxRate || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, convertTaxRate: e.target.value } as any))}
+                  />
+                </div>
+              </div>
+
+              {/* Resumo financeiro */}
+              {(effectiveDisc > 0 || convCardFee > 0 || convTaxRate > 0) && (
+                <div className="p-3 border rounded-lg space-y-1 text-sm">
+                  <div className="flex justify-between"><span>Subtotal:</span><span>{formatCurrency(selectedQuote.finalAmount)}</span></div>
+                  {effectiveDisc > 0 && <div className="flex justify-between text-red-600"><span>Desconto:</span><span>-{formatCurrency(effectiveDisc)}</span></div>}
+                  {convCardFee > 0 && <div className="flex justify-between text-orange-600"><span>Taxa Cartão:</span><span>-{formatCurrency(afterDiscount * convCardFee / 100)}</span></div>}
+                  {convTaxRate > 0 && <div className="flex justify-between text-orange-600"><span>Imposto:</span><span>-{formatCurrency(afterDiscount * convTaxRate / 100)}</span></div>}
+                  <div className="flex justify-between font-bold text-green-600 pt-1 border-t"><span>Valor Líquido:</span><span>{formatCurrency(netAmount)}</span></div>
+                </div>
+              )}
 
               <div>
                 <Label>Formas de Pagamento</Label>
@@ -1445,9 +1517,7 @@ export default function QuotesPage() {
                         setPaymentSplits(newSplits);
                       }}
                     >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="CASH_PIX">Dinheiro/Pix</SelectItem>
                         <SelectItem value="CREDIT_CARD">Cartão de Crédito</SelectItem>
@@ -1456,9 +1526,7 @@ export default function QuotesPage() {
                       </SelectContent>
                     </Select>
                     <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="Valor"
+                      type="number" step="0.01" placeholder="Valor"
                       value={split.amount}
                       onChange={(e) => {
                         const newSplits = [...paymentSplits];
@@ -1468,9 +1536,7 @@ export default function QuotesPage() {
                     />
                     {split.paymentMethod === 'CREDIT_CARD' && (
                       <Input
-                        type="number"
-                        min="1"
-                        placeholder="Parcelas"
+                        type="number" min="1" placeholder="Parcelas"
                         value={split.installments}
                         onChange={(e) => {
                           const newSplits = [...paymentSplits];
@@ -1484,14 +1550,12 @@ export default function QuotesPage() {
               </div>
 
               <div className="flex justify-end gap-2 pt-4">
-                <Button variant="outline" onClick={() => setIsConvertModalOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button onClick={handleConvertToSale} className="bg-green-600 hover:bg-green-700">
-                  Confirmar Conversão
-                </Button>
+                <Button variant="outline" onClick={() => setIsConvertModalOpen(false)}>Cancelar</Button>
+                <Button onClick={handleConvertToSale} className="bg-green-600 hover:bg-green-700">Confirmar Conversão</Button>
               </div>
             </div>
+            );
+          })()}
           )}
         </DialogContent>
       </Dialog>

@@ -105,6 +105,7 @@ model Workspace {
   quotes        Quote[]
   tags          Tag[]
   calendarEvents CalendarEvent[]
+  machines      MachineConfig[] // Máquinas de cartão
 }
 
 // Supply model - Insumos da clínica
@@ -288,6 +289,14 @@ model Sale {
   packageId        String?       // Pacote vendido (quando venda é de pacote)
   saleDate         DateTime      @default(now()) // Data da venda
   totalAmount      Float         // Valor total cobrado
+  discountPercent  Float         @default(0) // Desconto aplicado (%)
+  discountAmount   Float         @default(0) // Desconto em R$
+  finalAmount      Float         // Valor final com desconto
+  cardFeePercent   Float?        // Taxa do cartão de crédito (%)
+  cardFeeAmount    Float?        // Valor da taxa do cartão em R$
+  taxRate          Float?        // Alíquota de imposto (%)
+  taxAmount        Float?        // Valor do imposto em R$
+  netAmount        Float?        // Valor líquido (finalAmount - taxas - impostos)
   paymentMethod    PaymentMethod? // Forma de pagamento (deprecated - usar PaymentSplit)
   installments     Int           @default(1) // Número de parcelas (deprecated - usar PaymentSplit)
   paymentStatus    PaymentStatus @default(PENDING)
@@ -634,6 +643,24 @@ model QuoteItem {
   @@index([packageId])
 }
 
+
+// MachineConfig - Configuração de máquinas de cartão
+model MachineConfig {
+  id            String   @id @default(cuid())
+  name          String   // Nome da máquina (ex: "Cielo", "Getnet", "SumUp")
+  brand         String?  // Bandeira/marca
+  debitFee      Float    @default(0) // Taxa débito (%)
+  creditFee1x   Float    @default(0) // Taxa crédito 1x (%)
+  creditFee2x6x Float    @default(0) // Taxa crédito 2-6x (%)
+  creditFee7x12x Float  @default(0) // Taxa crédito 7-12x (%)
+  isActive      Boolean  @default(true)
+  workspaceId   String
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([workspaceId])
+}
 
 // Tag model - Tags para eventos do calendário
 model Tag {
