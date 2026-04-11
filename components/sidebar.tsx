@@ -46,6 +46,9 @@ const getAllMenuItems = () => [
   { key: 'procedures', name: 'Procedimentos', href: '/procedures', icon: Stethoscope },
   { key: 'supplies', name: 'Insumos', href: '/supplies', icon: Package },
   { key: 'packages', name: 'Pacotes', href: '/packages', icon: Tag },
+  { key: 'prescriptions', name: 'Receitas', href: '/receitas', icon: FileText },
+  { key: 'formulas', name: 'Fórmulas', href: '/formulas', icon: FileText },
+  { key: 'nutrition', name: 'Nutrição', href: '/nutricao', icon: FileText },
   
   // Equipe
   { key: 'collaborators', name: 'Colaboradores', href: '/collaborators', icon: UsersRound },

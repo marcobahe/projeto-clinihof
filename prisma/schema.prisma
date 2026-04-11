@@ -306,7 +306,7 @@ model Sale {
   totalAmount      Float         // Valor total cobrado
   discountPercent  Float         @default(0) // Desconto aplicado (%)
   discountAmount   Float         @default(0) // Desconto em R$
-  finalAmount      Float         // Valor final com desconto
+  finalAmount      Float         @default(0) // Valor final com desconto
   cardFeePercent   Float?        // Taxa do cartão de crédito (%)
   cardFeeAmount    Float?        // Valor da taxa do cartão em R$
   taxRate          Float?        // Alíquota de imposto (%)

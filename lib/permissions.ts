@@ -40,6 +40,15 @@ export const PERMISSIONS = {
   
   // Orçamentos
   quotes: ['MASTER', 'ADMIN', 'MANAGER', 'RECEPTIONIST'],
+  
+  // Receitas médicas
+  prescriptions: ['MASTER', 'ADMIN', 'MANAGER', 'RECEPTIONIST'],
+  
+  // Fórmulas manipuladas
+  formulas: ['MASTER', 'ADMIN', 'MANAGER', 'RECEPTIONIST'],
+  
+  // Nutrição / Planejamento alimentar
+  nutrition: ['MASTER', 'ADMIN', 'MANAGER', 'RECEPTIONIST'],
 } as const
 
 // Função para verificar se um role tem acesso a um recurso
@@ -99,6 +108,9 @@ export function getVisibleMenuItems(role: UserRole) {
     { key: 'procedures', name: 'Procedimentos', href: '/procedures', icon: 'Stethoscope' },
     { key: 'supplies', name: 'Insumos', href: '/supplies', icon: 'Package' },
     { key: 'packages', name: 'Pacotes', href: '/packages', icon: 'Tag' },
+    { key: 'prescriptions', name: 'Receitas', href: '/receitas', icon: 'FileText' },
+    { key: 'formulas', name: 'Fórmulas', href: '/formulas', icon: 'FileText' },
+    { key: 'nutrition', name: 'Nutrição', href: '/nutricao', icon: 'FileText' },
     { key: 'collaborators', name: 'Colaboradores', href: '/collaborators', icon: 'UserCheck' },
     { key: 'quotes', name: 'Orçamentos', href: '/quotes', icon: 'FileText' },
     { key: 'commissions', name: 'Comissões', href: '/comissoes', icon: 'Percent' },
