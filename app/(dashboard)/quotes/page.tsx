@@ -554,7 +554,7 @@ export default function QuotesPage() {
     }
 
     const selectedTotal = selectedQuote.items
-      .filter(item => partialSelectedItems.includes(item.id))
+      .filter(item => item.id && partialSelectedItems.includes(item.id))
       .reduce((sum, item) => sum + item.totalPrice, 0);
 
     const totalSplitAmount = paymentSplits.reduce((sum, split) => sum + split.amount, 0);
@@ -1340,7 +1340,7 @@ export default function QuotesPage() {
             <div className="space-y-4">
               <div className="space-y-2">
                 {selectedQuote.items.map(item => {
-                  const isSelected = partialSelectedItems.includes(item.id);
+                  const isSelected = item.id && partialSelectedItems.includes(item.id);
                   return (
                     <div
                       key={item.id}
@@ -1367,7 +1367,7 @@ export default function QuotesPage() {
               </div>
 
               {partialSelectedItems.length > 0 && (() => {
-                const selectedTotal = selectedQuote.items.filter(i => partialSelectedItems.includes(i.id)).reduce((sum, i) => sum + i.totalPrice, 0);
+                const selectedTotal = selectedQuote.items.filter(i => i.id && partialSelectedItems.includes(i.id)).reduce((sum, i) => sum + i.totalPrice, 0);
                 return (
                   <>
                     <div className="p-3 bg-purple-50 rounded-lg flex justify-between items-center">
