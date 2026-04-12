@@ -747,7 +747,7 @@ export default function QuotesPage() {
                             <SelectValue placeholder="Adicionar Pacote" />
                           </SelectTrigger>
                           <SelectContent>
-                            {packages.filter(p => p.isActive !== false).map(pkg => (
+                            {packages.filter(p => (p as any).isActive !== false).map(pkg => (
                               <SelectItem key={pkg.id} value={pkg.id}>
                                 {pkg.name} - {formatCurrency(pkg.finalPrice)}
                               </SelectItem>
@@ -1244,7 +1244,7 @@ export default function QuotesPage() {
                         <SelectValue placeholder="Adicionar Pacote" />
                       </SelectTrigger>
                       <SelectContent>
-                        {packages.filter(p => p.isActive !== false).map(pkg => (
+                        {packages.filter(p => (p as any).isActive !== false).map(pkg => (
                           <SelectItem key={pkg.id} value={pkg.id}>
                             {pkg.name} - {formatCurrency(pkg.finalPrice)}
                           </SelectItem>
