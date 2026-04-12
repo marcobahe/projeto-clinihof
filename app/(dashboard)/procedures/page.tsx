@@ -95,6 +95,9 @@ export default function ProceduresPage() {
     name: '',
     price: '',
     duration: '',
+    description: '',
+    sessionCount: '',
+    timePerSession: '',
   });
   const [selectedSupplies, setSelectedSupplies] = useState<ProcedureSupply[]>([]);
   const [selectedCollaborators, setSelectedCollaborators] = useState<ProcedureCollaborator[]>([]);
