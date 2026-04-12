@@ -1555,6 +1555,7 @@ export default function QuotesPage() {
                 <Button onClick={handleConvertToSale} className="bg-green-600 hover:bg-green-700">Confirmar Conversão</Button>
               </div>
             </div>
+            );
           })()}
         </DialogContent>
       </Dialog>
