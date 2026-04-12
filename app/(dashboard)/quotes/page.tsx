@@ -1346,7 +1346,7 @@ export default function QuotesPage() {
                       className={`p-3 border rounded-lg cursor-pointer transition-colors ${isSelected ? 'border-green-500 bg-green-50' : 'hover:border-gray-400'}`}
                       onClick={() => {
                         setPartialSelectedItems(prev =>
-                          isSelected ? prev.filter(id => id !== item.id) : [...prev, item.id]
+                          isSelected ? prev.filter(id => id !== item.id) : [...prev, item.id!]
                         );
                       }}
                     >
