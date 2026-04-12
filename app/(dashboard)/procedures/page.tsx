@@ -218,6 +218,9 @@ export default function ProceduresPage() {
       name: procedure.name,
       price: procedure.price.toString(),
       duration: procedure.duration.toString(),
+      description: procedure.description || '',
+      sessionCount: procedure.sessionCount?.toString() || '',
+      timePerSession: procedure.timePerSession?.toString() || '',
     });
     
     const loadedSupplies = procedure.supplies?.map((ps) => ({
