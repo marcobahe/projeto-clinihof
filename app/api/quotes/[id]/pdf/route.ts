@@ -84,11 +84,11 @@ export async function GET(
     const stream = await renderToStream(React.createElement(QuoteTemplate, { data: pdfData }) as any);
 
     // Converter stream para buffer
-    const chunks: Buffer[] = [];
+    const chunks: Uint8Array[] = [];
     for await (const chunk of stream as unknown as Readable) {
-      chunks.push(Buffer.from(chunk));
+      chunks.push(Buffer.from(chunk) as unknown as Uint8Array);
     }
-    const pdfBuffer = Buffer.concat(chunks);
+    const pdfBuffer = Buffer.concat(chunks as unknown as Buffer[]);
 
     // Retornar o PDF
     return new NextResponse(pdfBuffer, {
