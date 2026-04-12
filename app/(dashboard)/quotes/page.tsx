@@ -302,6 +302,8 @@ export default function QuotesPage() {
           leadSource: '',
           notes: '',
           expirationDate: '',
+          discountPercent: '',
+          discountAmount: '',
           items: []
         });
       } else {
