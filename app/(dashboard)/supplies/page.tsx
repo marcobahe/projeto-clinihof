@@ -416,7 +416,7 @@ export default function SuppliesPage() {
                               <div>
                                 <p className="font-medium text-green-700">Cadastrar Novo Insumo</p>
                                 {dropdownSearch && (
-                                  <p className="text-xs text-green-600">Criar "{dropdownSearch}"</p>
+                                  <p className="text-xs text-green-600">Criar &quot;{dropdownSearch}&quot;</p>
                                 )}
                               </div>
                             </button>

@@ -14,7 +14,8 @@ export async function getEffectiveWorkspaceId(): Promise<string | null> {
     if (impersonation) return impersonation.workspaceId
   }
   
-  return (session.user as any).workspaceId || null
+  const workspace = await getUserWorkspace((session.user as any).id)
+  return workspace?.id || null
 }
 
 export async function getEffectiveWorkspace() {
