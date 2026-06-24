@@ -55,6 +55,7 @@ export const authOptions: NextAuthOptions = {
           name: user.name,
           image: user.image,
           role: (user as any).role || 'USER',
+          workspaceId: (user as any).workspaceId || null,
         };
       },
     }),
@@ -70,22 +71,25 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         token.role = (user as any).role || 'USER';
+        token.workspaceId = (user as any).workspaceId || null;
       }
       return token;
     },
     async session({ session, token }) {
       if (session?.user && token.id) {
         (session.user as any).id = token.id;
+        (session.user as any).workspaceId = token.workspaceId || null;
         
         // Always fetch fresh user data to get current role and name
         try {
           const currentUser = await prisma.user.findUnique({
             where: { id: token.id as string },
-            select: { role: true, name: true, image: true }
+            select: { role: true, name: true, image: true, workspaceId: true }
           });
           
           // Use current data from database, fallback to token values
           (session.user as any).role = currentUser?.role || token.role || 'USER';
+          (session.user as any).workspaceId = currentUser?.workspaceId || token.workspaceId || null;
           if (currentUser?.name) {
             session.user.name = currentUser.name;
           }

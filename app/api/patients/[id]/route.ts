@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { getUserWorkspace } from '@/lib/workspace';
+import { getEffectiveWorkspace } from '@/lib/get-workspace-id';
+import { canAccess, canWrite } from '@/lib/permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +20,11 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    const workspace = await getUserWorkspace((session.user as any).id);
+    if (!canAccess((session.user as any).role, 'patients')) {
+      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
+    }
+
+    const workspace = await getEffectiveWorkspace();
 
     if (!workspace) {
       return NextResponse.json({ error: 'Workspace não encontrado' }, { status: 404 });
@@ -52,7 +57,11 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    const workspace = await getUserWorkspace((session.user as any).id);
+    if (!canWrite((session.user as any).role, 'patients')) {
+      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
+    }
+
+    const workspace = await getEffectiveWorkspace();
 
     if (!workspace) {
       return NextResponse.json({ error: 'Workspace não encontrado' }, { status: 404 });
@@ -108,7 +117,11 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
-    const workspace = await getUserWorkspace((session.user as any).id);
+    if (!canWrite((session.user as any).role, 'patients')) {
+      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
+    }
+
+    const workspace = await getEffectiveWorkspace();
 
     if (!workspace) {
       return NextResponse.json({ error: 'Workspace não encontrado' }, { status: 404 });

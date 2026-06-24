@@ -1851,7 +1851,7 @@ export default function AppointmentsPage() {
                         {sessionsToCancel.size} sessão(ões) selecionada(s) para cancelamento
                       </p>
                       <p className="text-sm text-red-700 mt-1">
-                        Clique no botão "Cancelar Sessões Selecionadas" para confirmar o cancelamento. Esta ação não pode ser desfeita.
+                        Clique no botão &quot;Cancelar Sessões Selecionadas&quot; para confirmar o cancelamento. Esta ação não pode ser desfeita.
                       </p>
                     </div>
                   </div>

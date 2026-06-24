@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { getEffectiveWorkspace } from '@/lib/get-workspace-id';
+import { canAccess, canWrite } from '@/lib/permissions';
+import { PatientOrigin, Prisma } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,14 +16,70 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
     }
 
+    if (!canAccess((session.user as any).role, 'patients')) {
+      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
+    }
+
     const workspace = await getEffectiveWorkspace();
 
     if (!workspace) {
       return NextResponse.json({ error: 'Workspace não encontrado' }, { status: 404 });
     }
 
+    const { searchParams } = new URL(req.url);
+    const search = searchParams.get('search')?.trim();
+    const origin = searchParams.get('origin') as PatientOrigin | null;
+    const city = searchParams.get('city')?.trim();
+    const state = searchParams.get('state')?.trim();
+    const hasEmail = searchParams.get('hasEmail');
+    const hasBirthday = searchParams.get('hasBirthday');
+    const createdFrom = searchParams.get('createdFrom');
+    const createdTo = searchParams.get('createdTo');
+
+    const where: Prisma.PatientWhereInput = { workspaceId: workspace.id };
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { cpf: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    if (origin && Object.values(PatientOrigin).includes(origin)) {
+      where.origin = origin;
+    }
+
+    if (city) {
+      where.city = { contains: city, mode: 'insensitive' };
+    }
+
+    if (state) {
+      where.state = { equals: state.toUpperCase(), mode: 'insensitive' };
+    }
+
+    if (hasEmail === 'true') {
+      where.email = { not: null };
+    } else if (hasEmail === 'false') {
+      where.email = null;
+    }
+
+    if (hasBirthday === 'true') {
+      where.birthday = { not: null };
+    } else if (hasBirthday === 'false') {
+      where.birthday = null;
+    }
+
+    if (createdFrom || createdTo) {
+      where.createdAt = {
+        ...(createdFrom ? { gte: new Date(createdFrom) } : {}),
+        ...(createdTo ? { lte: new Date(createdTo) } : {}),
+      };
+    }
+
     const patients = await prisma.patient.findMany({
-      where: { workspaceId: workspace.id },
+      where,
       orderBy: { createdAt: 'desc' },
     });
 
@@ -38,6 +96,10 @@ export async function POST(req: NextRequest) {
 
     if (!session?.user) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+    }
+
+    if (!canWrite((session.user as any).role, 'patients')) {
+      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
     }
 
     const workspace = await getEffectiveWorkspace();

@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { UserRole } from '@prisma/client';
+import { getUserWorkspace } from '@/lib/workspace';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,6 +49,32 @@ export async function PATCH(
       return NextResponse.json(
         { error: 'Você não pode alterar sua própria permissão' },
         { status: 400 }
+      );
+    }
+
+    const workspace = await getUserWorkspace(currentUser.id);
+    if (!workspace) {
+      return NextResponse.json(
+        { error: 'Workspace não encontrado' },
+        { status: 404 }
+      );
+    }
+
+    const targetUser = await prisma.user.findFirst({
+      where: {
+        id,
+        OR: [
+          { workspaceId: workspace.id },
+          { id: workspace.ownerId },
+        ],
+      },
+      select: { id: true },
+    });
+
+    if (!targetUser) {
+      return NextResponse.json(
+        { error: 'Usuário não pertence ao seu workspace' },
+        { status: 403 }
       );
     }
 
