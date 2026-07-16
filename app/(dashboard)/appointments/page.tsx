@@ -2,7 +2,7 @@
 import { formatCurrency, formatNumber, formatPercent } from '@/lib/utils';
 
 import { useEffect, useState, useRef } from 'react';
-import { Plus, TrendingUp, ShoppingCart, Clock, CheckCircle2, X, User, Phone, Mail, Calendar, CreditCard, Edit, XCircle, AlertTriangle } from 'lucide-react';
+import { Plus, TrendingUp, ShoppingCart, Clock, CheckCircle2, X, User, Phone, Mail, Calendar, CreditCard, Edit, XCircle, AlertTriangle, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -149,6 +149,7 @@ export default function AppointmentsPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editSessionDates, setEditSessionDates] = useState<{[key: string]: string}>({});
   const [sessionsToCancel, setSessionsToCancel] = useState<Set<string>>(new Set());
+  const [deletingSaleId, setDeletingSaleId] = useState<string | null>(null);
 
   useEffect(() => {
     // Set initial date on client side to avoid hydration mismatch
@@ -709,6 +710,57 @@ export default function AppointmentsPage() {
     } catch (error) {
       console.error('Error saving edited sale:', error);
       toast.error('Erro ao salvar alterações');
+    }
+  };
+
+  const handleDeleteSale = async (sale: Sale, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+
+    if (deletingSaleId) return;
+
+    const totalSessions = sale.sessions?.length ?? sale._count?.sessions ?? 0;
+    const completedSessions = sale.completedSessions ?? sale.sessions?.filter(s => s.status === 'COMPLETED').length ?? 0;
+    const patientName = sale.patient?.name || 'paciente';
+    const message = [
+      `Excluir a venda de ${patientName}?`,
+      '',
+      `Valor: ${formatCurrency(sale.totalAmount)}`,
+      `Sessões vinculadas: ${totalSessions}`,
+      completedSessions > 0 ? `Sessões já concluídas: ${completedSessions}` : null,
+      '',
+      'A venda, parcelas, sessões e itens serão removidos das métricas, dashboard, comissões e fluxo de caixa.',
+      'Esta ação não pode ser desfeita.',
+    ].filter(Boolean).join('\n');
+
+    if (!window.confirm(message)) {
+      return;
+    }
+
+    try {
+      setDeletingSaleId(sale.id);
+      const res = await fetch(`/api/sales/${sale.id}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        toast.error(data.error || 'Erro ao excluir venda');
+        return;
+      }
+
+      toast.success(data.message || 'Venda excluída com sucesso');
+      setIsModalOpen(false);
+      setIsEditModalOpen(false);
+      setSelectedSale(null);
+      setEditingSale(null);
+      setEditSessionDates({});
+      setSessionsToCancel(new Set());
+      await loadData();
+    } catch (error) {
+      console.error('Error deleting sale:', error);
+      toast.error('Erro ao excluir venda');
+    } finally {
+      setDeletingSaleId(null);
     }
   };
 
@@ -1409,17 +1461,27 @@ export default function AppointmentsPage() {
                       className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:border-purple-400 hover:bg-purple-50/50 dark:hover:bg-purple-900/10 transition-colors cursor-pointer relative group"
                       onClick={() => openSaleDetails(sale)}
                     >
-                      {/* Edit Button */}
-                      <button
-                        onClick={(e) => openEditSale(sale, e)}
-                        className="absolute top-2 right-2 p-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 hover:border-purple-400 transition-all shadow-sm hover:shadow-md z-10"
-                        title="Editar venda"
-                      >
-                        <Edit className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                      </button>
+                      <div className="absolute top-2 right-2 flex items-center gap-2 z-10">
+                        <button
+                          onClick={(e) => openEditSale(sale, e)}
+                          className="p-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 hover:border-purple-400 transition-all shadow-sm hover:shadow-md disabled:opacity-60"
+                          title="Editar venda"
+                          disabled={deletingSaleId === sale.id}
+                        >
+                          <Edit className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                        </button>
+                        <button
+                          onClick={(e) => handleDeleteSale(sale, e)}
+                          className="p-2 rounded-lg bg-white dark:bg-gray-800 border border-red-200 dark:border-red-900/60 hover:bg-red-50 dark:hover:bg-red-900/30 hover:border-red-400 transition-all shadow-sm hover:shadow-md disabled:opacity-60"
+                          title="Excluir venda"
+                          disabled={deletingSaleId === sale.id}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-600 dark:text-red-400" />
+                        </button>
+                      </div>
 
                       <div className="flex justify-between items-start mb-3">
-                        <div className="pr-12">
+                        <div className="pr-24">
                           <h3 className="font-semibold text-lg text-purple-700 hover:text-purple-900">
                             {sale.patient.name}
                           </h3>
@@ -1497,16 +1559,27 @@ export default function AppointmentsPage() {
             <DialogTitle className="flex items-center justify-between pr-8">
               <span>Detalhes da Venda</span>
               {selectedSale && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openEditSale(selectedSale, e);
-                  }}
-                  className="p-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 hover:border-purple-400 transition-all shadow-sm hover:shadow-md"
-                  title="Editar venda"
-                >
-                  <Edit className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openEditSale(selectedSale, e);
+                    }}
+                    className="p-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 hover:border-purple-400 transition-all shadow-sm hover:shadow-md disabled:opacity-60"
+                    title="Editar venda"
+                    disabled={deletingSaleId === selectedSale.id}
+                  >
+                    <Edit className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                  </button>
+                  <button
+                    onClick={(e) => handleDeleteSale(selectedSale, e)}
+                    className="p-2 rounded-lg bg-white dark:bg-gray-800 border border-red-200 dark:border-red-900/60 hover:bg-red-50 dark:hover:bg-red-900/30 hover:border-red-400 transition-all shadow-sm hover:shadow-md disabled:opacity-60"
+                    title="Excluir venda"
+                    disabled={deletingSaleId === selectedSale.id}
+                  >
+                    <Trash2 className="h-4 w-4 text-red-600 dark:text-red-400" />
+                  </button>
+                </div>
               )}
             </DialogTitle>
           </DialogHeader>
@@ -1860,6 +1933,16 @@ export default function AppointmentsPage() {
 
               {/* Action Buttons */}
               <div className="flex flex-col gap-3 pt-4 border-t">
+                <Button
+                  onClick={(e) => handleDeleteSale(editingSale, e)}
+                  variant="outline"
+                  className="w-full border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                  disabled={deletingSaleId === editingSale.id}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  {deletingSaleId === editingSale.id ? 'Excluindo venda...' : 'Excluir Venda'}
+                </Button>
+
                 {sessionsToCancel.size > 0 && (
                   <Button
                     onClick={handleCancelSelectedSessions}

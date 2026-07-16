@@ -86,7 +86,7 @@ export async function GET(
   }
 }
 
-// DELETE /api/sales/[id] - Delete a sale (com estorno de comissões)
+// DELETE /api/sales/[id] - Delete a sale and remove it from financial metrics
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -104,43 +104,76 @@ export async function DELETE(
 
     const existingSale = await prisma.sale.findFirst({
       where: { id: params.id, workspaceId: workspace.id },
-      include: { sessions: true }
+      include: {
+        sessions: true,
+        paymentSplits: true,
+        items: true,
+      },
     });
 
     if (!existingSale) {
       return NextResponse.json({ error: 'Venda não encontrada' }, { status: 404 });
     }
 
-    // Verificar se tem sessões completadas
-    const completedSessions = existingSale.sessions.filter(s => s.status === 'COMPLETED');
-    if (completedSessions.length > 0) {
-      return NextResponse.json({
-        error: `Não é possível excluir esta venda. ${completedSessions.length} sessão(ões) já foram realizadas. Considere cancelar os procedimentos pendentes.`
-      }, { status: 400 });
-    }
+    const linkedQuote = await prisma.quote.findFirst({
+      where: {
+        workspaceId: workspace.id,
+        saleId: params.id,
+      },
+      select: {
+        id: true,
+        sentDate: true,
+      },
+    });
 
-    // Fire-and-forget: delete Google Calendar events
+    // Best effort: remove Google Calendar events before deleting the local sessions.
     const sessionsWithGoogleEvent = existingSale.sessions.filter(s => s.googleEventId);
     const userId = (session.user as any).id;
-    for (const sess of sessionsWithGoogleEvent) {
-      syncSessionToGoogleCalendar(userId, sess.id, 'delete')
-        .catch((err) => console.error('[GoogleCalendar] Sync error (sale delete):', err));
+    if (sessionsWithGoogleEvent.length > 0) {
+      const syncResults = await Promise.allSettled(
+        sessionsWithGoogleEvent.map(sess => syncSessionToGoogleCalendar(userId, sess.id, 'delete'))
+      );
+
+      syncResults.forEach((result) => {
+        if (result.status === 'rejected') {
+          console.error('[GoogleCalendar] Sync error (sale delete):', result.reason);
+        }
+      });
     }
 
-    // Estornar comissões — deletar parcelas, splits, sessões, items, venda
     await prisma.$transaction(async (tx) => {
-      // Deletar parcelas de cada payment split
       const splits = await tx.paymentSplit.findMany({ where: { saleId: params.id } });
       for (const split of splits) {
         await tx.paymentInstallment.deleteMany({ where: { paymentSplitId: split.id } });
       }
+
+      if (linkedQuote) {
+        await tx.quote.update({
+          where: { id: linkedQuote.id },
+          data: {
+            status: linkedQuote.sentDate ? 'SENT' : 'PENDING',
+            acceptedDate: null,
+            saleId: null,
+          },
+        });
+      }
+
       await tx.paymentSplit.deleteMany({ where: { saleId: params.id } });
       await tx.procedureSession.deleteMany({ where: { saleId: params.id } });
       await tx.saleItem.deleteMany({ where: { saleId: params.id } });
       await tx.sale.delete({ where: { id: params.id } });
     });
 
-    return NextResponse.json({ message: 'Venda excluída com estorno de comissões' });
+    return NextResponse.json({
+      message: 'Venda excluída com sucesso',
+      deleted: {
+        sale: 1,
+        sessions: existingSale.sessions.length,
+        paymentSplits: existingSale.paymentSplits.length,
+        items: existingSale.items.length,
+        linkedQuoteReset: Boolean(linkedQuote),
+      },
+    });
   } catch (error) {
     console.error('Error deleting sale:', error);
     return NextResponse.json({ error: 'Erro ao excluir venda' }, { status: 500 });
